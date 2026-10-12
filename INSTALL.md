@@ -93,10 +93,15 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 ### Linux
 
 ```sh
-npm run dist:linux
+npm run install:linux
 ```
 
-Получается `release/Finanse-1.0.0-linux-x86_64.AppImage` — один файл, который запускается без установки (`chmod +x` и двойной щелчок).
+Команда собирает программу и ставит её для текущего пользователя: в `~/.local/opt/finanse`, с ярлыком «Финансы» в меню приложений. Права администратора не нужны. Убрать: `desktop/install-linux.sh --uninstall` (данные остаются в `~/.config/finanse`).
+
+Отдельно в `release/` появляются два файла для переноса на другой компьютер:
+
+- `Finanse-1.0.0-linux-x64.tar.gz` — архив с программой; распаковать и запустить файл `finanse` внутри;
+- `Finanse-1.0.0-linux-x86_64.AppImage` — один файл, но ему нужна библиотека FUSE 2. В Arch, CachyOS и Fedora её по умолчанию нет, и файл не запустится; выручает запуск с ключом `--appimage-extract-and-run`.
 
 ### Windows
 
