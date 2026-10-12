@@ -147,9 +147,19 @@ async function exchange(): Promise<void> {
   }
 }
 
+/**
+ * Разбирает то, что ввели в форму подключения. Адрес и ключ можно ввести по отдельности
+ * или одной строкой «адрес#ключ» — её удобно переслать себе на телефон и вставить целиком.
+ */
+export function parseConnection(urlInput: string, tokenInput: string): { url: string | null; token: string } {
+  const [address, ...rest] = urlInput.split('#')
+  const fromLink = rest.join('#').trim()
+  return { url: normalizeServerUrl(address), token: tokenInput.trim() || fromLink }
+}
+
 /** Подключает устройство к серверу: проверяет адрес и ключ, затем делает первый обмен. */
-export async function connectSync(urlInput: string, token: string): Promise<void> {
-  const url = normalizeServerUrl(urlInput)
+export async function connectSync(urlInput: string, tokenInput: string): Promise<void> {
+  const { url, token } = parseConnection(urlInput, tokenInput)
   if (!url) throw new Error('Введите адрес сервера, например http://192.168.1.10:8787')
   if (!token.trim()) throw new Error('Введите ключ доступа')
   // Ключ сервера состоит из латинских букв и цифр; другое в заголовок запроса даже не поместится.

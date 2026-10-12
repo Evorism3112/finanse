@@ -1,0 +1,15 @@
+{
+  "appId": "app.finanse.mobile",
+  "appName": "Финансы",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_finanse",
+      "iconColor": "#1f7a5c"
+    }
+  }
+}

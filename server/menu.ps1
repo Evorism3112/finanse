@@ -29,7 +29,7 @@ function Show-Status {
   }
   $Info = Join-Path $Target 'connection.txt'
   if (Test-Path $Info) {
-    Get-Content $Info -Encoding UTF8 | Where-Object { $_ -match '^(Адрес|Ключ доступа):' } | ForEach-Object { Write-Host $_ }
+    Get-Content $Info -Encoding UTF8 | Where-Object { $_ -match '^(Адрес|Ключ доступа|Строка подключения):' } | ForEach-Object { Write-Host $_ }
   }
 }
 
@@ -47,9 +47,43 @@ function Stop-All {
   Write-Host 'Остановлено. После перезагрузки Windows сервер запустится снова — чтобы этого не было, удалите службы (пункт 5).'
 }
 
+# Сведения для разбора неполадок: кто занимает порты, что с задачами и что в журналах.
+function Show-Diagnostics {
+  foreach ($LocalPort in 80, 443, 8787) {
+    $Ids = @(Get-NetTCPConnection -State Listen -LocalPort $LocalPort -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+    $Names = foreach ($Id in $Ids) { if ($Id -eq 4) { 'IIS (веб-сервер Windows)' } else { (Get-Process -Id $Id -ErrorAction SilentlyContinue).ProcessName } }
+    $Owner = (@($Names) | Where-Object { $_ }) -join ', '
+    if (-not $Owner) { $Owner = 'свободен' }
+    Write-Host "Порт ${LocalPort}: $Owner"
+  }
+  Write-Host ''
+  $Found = @(Get-Tasks)
+  if ($Found.Count -eq 0) { Write-Host 'Задачи: не созданы' }
+  $Found | ForEach-Object { Write-Host "Задача $($_.TaskName): $($_.State)" }
+  foreach ($Log in 'server.log', 'caddy\caddy.log') {
+    $Path = Join-Path $Target $Log
+    if (Test-Path $Path) {
+      Write-Host ''
+      Write-Host "--- последние строки $Log ---"
+      Get-Content $Path -Tail 12 -Encoding UTF8 | ForEach-Object { Write-Host $_ }
+    }
+  }
+}
+
 function Install-All {
-  $Domain = Read-Host 'Свой домен (просто Enter, если домена нет)'
-  if ($Domain.Trim()) { & $Installer -Domain $Domain.Trim() } else { & $Installer }
+  Write-Host 'Как установить:'
+  Write-Host '  1 - только база для установленных приложений (адрес вида http://IP:8787).'
+  Write-Host '      Подходит, если на сервере уже есть сайт: порты 80 и 443 не нужны.'
+  Write-Host '  2 - база и приложение в браузере по HTTPS (нужны свободные порты 80 и 443).'
+  $Mode = (Read-Host 'Выберите 1 или 2').Trim()
+  if ($Mode -eq '1') {
+    & $Installer -ApiOnly
+  } elseif ($Mode -eq '2') {
+    $Domain = Read-Host 'Свой домен (просто Enter, если домена нет)'
+    if ($Domain.Trim()) { & $Installer -Domain $Domain.Trim() } else { & $Installer }
+  } else {
+    Write-Host 'Такого варианта нет.' -ForegroundColor Yellow
+  }
 }
 
 while ($true) {
@@ -63,6 +97,7 @@ while ($true) {
   Write-Host '  3. Остановить'
   Write-Host '  4. Показать адрес и ключ'
   Write-Host '  5. Удалить службы (база останется)'
+  Write-Host '  6. Диагностика'
   Write-Host '  0. Выход'
   Write-Host ''
   $Choice = Read-Host 'Выберите пункт'
@@ -77,6 +112,7 @@ while ($true) {
         if (Test-Path $Info) { Get-Content $Info -Encoding UTF8 | ForEach-Object { Write-Host $_ } } else { Write-Host 'Сервер ещё не установлен.' -ForegroundColor Yellow }
       }
       '5' { Stop-All; & $Installer -Uninstall }
+      '6' { Show-Diagnostics }
       '0' { exit 0 }
       default { Write-Host 'Такого пункта нет.' -ForegroundColor Yellow }
     }

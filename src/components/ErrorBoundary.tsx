@@ -21,13 +21,13 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
 
   rescue = async () => {
     try {
-      downloadText(`finanse-${today()}.json`, await exportBackup())
+      await downloadText(`finanse-${today()}.json`, await exportBackup())
       this.setState({ note: 'Копия данных сохранена в файл.' })
     } catch {
       try {
         const [latest] = await listSnapshots()
         if (!latest) throw new Error('нет автокопий')
-        downloadText(`finanse-${latest.day}-autocopy.json`, latest.data)
+        await downloadText(`finanse-${latest.day}-autocopy.json`, latest.data)
         this.setState({ note: `База недоступна, сохранена автокопия за ${latest.day}.` })
       } catch {
         this.setState({ note: 'Не удалось прочитать ни базу, ни автокопии.' })

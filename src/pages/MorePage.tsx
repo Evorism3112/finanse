@@ -27,7 +27,7 @@ export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void })
   const snapshots = useLiveQuery(listSnapshots)
 
   async function exportFile() {
-    downloadText(`finanse-${today()}.json`, await exportBackup())
+    await downloadText(`finanse-${today()}.json`, await exportBackup())
     markBackupDone()
     setBackupAt(lastBackupAt())
     onBackup()
@@ -146,7 +146,7 @@ export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void })
                     </span>
                     <span className="muted">операций: {snapshot.transactions}</span>
                   </span>
-                  <button type="button" className="chip" onClick={() => downloadText(`finanse-${snapshot.day}-autocopy.json`, snapshot.data)}>
+                  <button type="button" className="chip" onClick={() => void downloadText(`finanse-${snapshot.day}-autocopy.json`, snapshot.data)}>
                     Скачать
                   </button>
                   <ConfirmButton label="Вернуть" armedLabel="Заменить данные?" className="chip" onConfirm={() => restore(snapshot)} />
@@ -195,7 +195,7 @@ function SyncCard() {
         <h3>Синхронизация между устройствами</h3>
         <p className="muted">
           Подключите приложение к своему серверу, и данные будут одинаковыми на всех устройствах. Адрес и ключ сервер
-          показывает при установке.
+          показывает при установке. Можно вставить одну строку подключения вида «адрес#ключ» в поле адреса.
         </p>
         <form onSubmit={connect}>
           <label>

@@ -10,6 +10,13 @@ function onKeyDown(e: KeyboardEvent) {
   stack[stack.length - 1]()
 }
 
+/** Закрывает верхнее окно, если оно есть. Нужна кнопке «Назад» на телефоне. */
+export function closeTopWindow(): boolean {
+  if (stack.length === 0) return false
+  stack[stack.length - 1]()
+  return true
+}
+
 /** Закрывает окно по клавише Escape, пока компонент на экране. */
 export function useEscape(onClose: () => void) {
   const latest = useRef(onClose)

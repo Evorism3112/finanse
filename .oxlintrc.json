@@ -17,6 +17,7 @@
   "ignorePatterns": [
     "dist",
     "release",
-    "server/web"
+    "server/web",
+    "android"
   ]
 }

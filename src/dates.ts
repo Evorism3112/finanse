@@ -7,6 +7,12 @@ export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** Сдвигает дату ГГГГ-ММ-ДД на заданное число дней, в том числе назад. */
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return isoDate(new Date(y, m - 1, d + days))
+}
+
 export function today(): string {
   return isoDate(new Date())
 }

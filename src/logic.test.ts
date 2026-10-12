@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import { accountLabel } from './accountKinds'
-import { changedSince, normalizeServerUrl } from './sync'
+import { upcomingReminders } from './reminders'
+import { changedSince, normalizeServerUrl, parseConnection } from './sync'
 import { assignSlots } from './chartColors'
-import { dayLabel, formatDate, parseDate, shiftMonth } from './dates'
+import { addDays, dayLabel, formatDate, parseDate, shiftMonth } from './dates'
 import { normalizeCategory, normalizeSubscription } from './db'
 import { normalizeAccount, type Account, type Category, type Subscription, type Transaction } from './db'
 import { parseBackup, pickNewer } from './merge'
@@ -632,5 +633,79 @@ describe('синхронизация: подготовка на устройст
     expect(changedSince(records, 100).map((r) => r.id)).toEqual(['c'])
     // Первый обмен: уходит всё, кроме нетронутых стандартных категорий (у них время изменения 0).
     expect(changedSince(records, 0).map((r) => r.id)).toEqual(['b', 'c'])
+  })
+})
+
+describe('напоминания на будущее (для телефона)', () => {
+  const music: Subscription = {
+    ...synced,
+    id: 'music',
+    direction: 'expense',
+    installments: null,
+    name: 'Музыка',
+    amount: 29900,
+    currency: 'RUB',
+    period: 'month',
+    nextDate: '2026-10-20',
+    autoRenew: true,
+    accountId: null,
+    categoryId: null,
+    remindDays: 3,
+    note: '',
+  }
+  const card: Account = {
+    ...account('sber', 'RUB'),
+    name: 'Сбер-банк',
+    kind: 'credit_card',
+    nextPaymentDate: '2026-10-31',
+    paymentAmount: 969150,
+    graceDate: '2026-11-25',
+  }
+  const clean = (text: string) => text.replace(/\s/g, ' ')
+
+  test('addDays', () => {
+    expect(addDays('2026-10-20', -3)).toBe('2026-10-17')
+    expect(addDays('2026-10-30', 3)).toBe('2026-11-02')
+    expect(addDays('2026-01-01', -1)).toBe('2025-12-31')
+    expect(addDays('2026-03-28', 2)).toBe('2026-03-30')
+  })
+
+  test('по подписке два напоминания: когда пора напомнить и в сам день', () => {
+    const list = upcomingReminders([music], [], new Map(), '2026-10-12')
+    expect(list.map((r) => [r.id, r.date, clean(r.body)])).toEqual([
+      ['music@2026-10-17', '2026-10-17', 'Списание через 3 дн. · 299,00 ₽'],
+      ['music@2026-10-20', '2026-10-20', 'Списание сегодня · 299,00 ₽'],
+    ])
+    expect(list[0].title).toBe('Музыка')
+  })
+
+  test('то, что уже наступило или слишком далеко, в расписание не идёт', () => {
+    // Напоминать пора уже сегодня — остаётся только сам день срока.
+    expect(upcomingReminders([music], [], new Map(), '2026-10-17').map((r) => r.date)).toEqual(['2026-10-20'])
+    expect(upcomingReminders([music], [], new Map(), '2026-10-20')).toEqual([])
+    expect(upcomingReminders([{ ...music, nextDate: '2027-06-01' }], [], new Map(), '2026-10-12')).toEqual([])
+    // Напоминание «в день срока» при remindDays = 0 одно, а не два одинаковых.
+    expect(upcomingReminders([{ ...music, remindDays: 0 }], [], new Map(), '2026-10-12').map((r) => r.date)).toEqual(['2026-10-20'])
+  })
+
+  test('по кредитной карте — взнос и конец льготного периода, только пока есть долг', () => {
+    const list = upcomingReminders([], [card], new Map([['sber', -22803149]]), '2026-10-12')
+    expect(list.map((r) => [r.id, clean(r.body)])).toEqual([
+      ['sber:pay@2026-10-28', 'Платёж через 3 дн. · 9 691,50 ₽'],
+      ['sber:pay@2026-10-31', 'Платёж сегодня · 9 691,50 ₽'],
+      ['sber:grace@2026-11-18', 'Льготный период заканчивается через 7 дн. · погасить 228 031,49 ₽'],
+      ['sber:grace@2026-11-25', 'Льготный период заканчивается сегодня · погасить 228 031,49 ₽'],
+    ])
+    expect(list.every((r) => r.title === 'Кредитка Сбер-банк')).toBe(true)
+    expect(upcomingReminders([], [card], new Map([['sber', 0]]), '2026-10-12')).toEqual([])
+  })
+
+  test('строка подключения «адрес#ключ»', () => {
+    expect(parseConnection('http://1.2.3.4:8787#abcDEF_123', '')).toEqual({ url: 'http://1.2.3.4:8787', token: 'abcDEF_123' })
+    expect(parseConnection(' 1.2.3.4:8787#key ', '  ')).toEqual({ url: 'http://1.2.3.4:8787', token: 'key' })
+    // Ключ, введённый отдельно, важнее того, что в строке.
+    expect(parseConnection('http://1.2.3.4:8787#old', 'new')).toEqual({ url: 'http://1.2.3.4:8787', token: 'new' })
+    expect(parseConnection('http://1.2.3.4:8787', 'key')).toEqual({ url: 'http://1.2.3.4:8787', token: 'key' })
+    expect(parseConnection('', 'key').url).toBeNull()
   })
 })

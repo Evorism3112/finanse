@@ -5,13 +5,14 @@ import { lastBackupAt } from './backup'
 import { BellIcon, ChartIcon, ListIcon, MoreIcon, RepeatIcon, WalletIcon } from './components/Icons'
 import { today } from './dates'
 import { db, type Data, type Synced } from './db'
-import { notifyDue } from './notify'
+import { notifyDue, scheduleUpcoming } from './notify'
 import { AccountsPage } from './pages/AccountsPage'
 import { MorePage } from './pages/MorePage'
 import { ReportPage } from './pages/ReportPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { accountReminders } from './payments'
+import { upcomingReminders } from './reminders'
 import { saveDailySnapshot } from './snapshots'
 import { accountBalances } from './stats'
 import { scheduleSync } from './sync'
@@ -100,6 +101,12 @@ export default function App() {
   useEffect(() => {
     void notifyDue([...due.map((s) => ({ id: s.id, ...reminderText(s, day) })), ...debtReminders], day)
   }, [due, debtReminders, day])
+
+  // В приложении для телефона будущие напоминания передаются системе — они придут и при закрытом приложении.
+  useEffect(() => {
+    const balances = accountBalances(data.accounts, data.transactions)
+    void scheduleUpcoming(upcomingReminders(data.subscriptions, data.accounts, balances, day))
+  }, [data, day])
 
   // Данные лежат только в браузере, поэтому без свежей копии в файле их легко потерять.
   const backupDays = backupAt === null ? null : Math.floor((new Date(`${day}T23:59:59`).getTime() - backupAt) / DAY_MS)

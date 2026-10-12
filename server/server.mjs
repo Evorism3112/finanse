@@ -6,6 +6,7 @@
 //   node server.mjs --token    показать ключ доступа и выйти
 //
 // Настройки — переменными окружения: FINANSE_PORT (8787), FINANSE_DATA (папка с базой), FINANSE_WEB (папка с приложением),
+// FINANSE_WEB=off — не раздавать приложение, только обмен данными;
 // FINANSE_HOST (0.0.0.0; 127.0.0.1 — принимать запросы только с этого компьютера, когда перед сервером стоит HTTPS-прокси).
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -102,6 +103,10 @@ export function createApp({ dataDir, webDir }) {
         return send(404, { error: 'нет такого адреса' })
       }
 
+      // Без приложения сервер только обменивается данными; на главной — короткая подсказка тому, кто открыл адрес в браузере.
+      if (!webRoot && request.method === 'GET' && url.pathname === '/') {
+        return send(200, 'Сервер «Финансов» работает. Этот адрес вводится в приложении: «Ещё» → «Синхронизация между устройствами».', { 'Content-Type': 'text/plain; charset=utf-8' })
+      }
       if (!webRoot || request.method !== 'GET') return send(404, { error: 'нет такого адреса' })
       // Приложение одностраничное: всё, что не файл, отдаёт index.html.
       let file = resolve(webRoot, `.${decodeURIComponent(url.pathname)}`)
@@ -143,7 +148,10 @@ function lanAddresses() {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dataDir = resolve(process.env.FINANSE_DATA ?? join(here, 'data'))
   // В папке проекта свежая сборка лежит в dist; в установленной копии её нет, там приложение в web.
-  const webDir = resolve(process.env.FINANSE_WEB ?? (existsSync(join(here, '..', 'dist', 'index.html')) ? join(here, '..', 'dist') : join(here, 'web')))
+  const webDir =
+    process.env.FINANSE_WEB === 'off'
+      ? null
+      : resolve(process.env.FINANSE_WEB ?? (existsSync(join(here, '..', 'dist', 'index.html')) ? join(here, '..', 'dist') : join(here, 'web')))
   const port = Number(process.env.FINANSE_PORT ?? 8787)
   const host = process.env.FINANSE_HOST ?? '0.0.0.0'
 

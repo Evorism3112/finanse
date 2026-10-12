@@ -1,4 +1,4 @@
-# Собирает установщики для Windows и Linux и архив с сервером синхронизации.
+# Собирает установщики для Windows и Linux, приложение для Android и архив с сервером синхронизации.
 # Запускается при отправке метки версии (git tag v1.0.0 && git push --tags) или вручную на вкладке Actions.
 # Готовые файлы лежат в разделе Artifacts у завершённого запуска.
 name: Сборка установщиков
@@ -53,4 +53,28 @@ jobs:
         with:
           name: finanse-server
           path: release/finanse-server.zip
+          if-no-files-found: error
+
+  android:
+    name: Приложение для Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run android:sync
+      - run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        working-directory: android
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk Finanse.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finanse-Android
+          path: Finanse.apk
           if-no-files-found: error

@@ -13,15 +13,23 @@
     "desktop": "npm run build && electron .",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win",
-    "dist:server": "npm run build && node scripts/pack-server.mjs"
+    "dist:server": "npm run build && node scripts/pack-server.mjs",
+    "android:sync": "npm run build && cap sync android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.3",
     "dexie": "^4.4.6",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

@@ -6,6 +6,7 @@
 # Обычно запускается из меню Finanse.cmd. Напрямую, от имени администратора:
 #   powershell -ExecutionPolicy Bypass -File install-vps.ps1                       обычная установка
 #   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -Domain my.site.ru    со своим доменом (он уже должен указывать на этот сервер)
+#   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -ApiOnly              только база для установленных приложений: http://адрес:8787, порты 80 и 443 не нужны
 #   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -NoHttps              без HTTPS, только http://адрес:8787 — для закрытой сети
 #   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -Uninstall            убрать службы и правила брандмауэра (база остаётся)
 #
@@ -15,11 +16,14 @@ param(
   [string]$Domain = '',
   [int]$Port = 8787,
   [switch]$NoHttps,
+  [switch]$ApiOnly,
   [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+# Режим «только база» — это сервер без HTTPS и без раздачи приложения в браузер.
+if ($ApiOnly) { $NoHttps = $true }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Target = Join-Path $env:ProgramData 'finanse-server'
@@ -108,13 +112,45 @@ Remove-Task $ProxyTask
 Stop-Workers
 New-Item -ItemType Directory -Force -Path (Join-Path $Target 'data') | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'server.mjs'), (Join-Path $PSScriptRoot 'sync.mjs') -Destination $Target -Force
-$Web = Join-Path $PSScriptRoot 'web'
-if (-not (Test-Path (Join-Path $Web 'index.html'))) { throw "Рядом с установщиком нет папки web с приложением. Распакуйте архив finanse-server целиком." }
 if (Test-Path (Join-Path $Target 'web')) { Remove-Item (Join-Path $Target 'web') -Recurse -Force }
-Copy-Item $Web -Destination (Join-Path $Target 'web') -Recurse -Force
+$WebSetting = 'off'
+if (-not $ApiOnly) {
+  $Web = Join-Path $PSScriptRoot 'web'
+  if (-not (Test-Path (Join-Path $Web 'index.html'))) { throw "Рядом с установщиком нет папки web с приложением. Распакуйте архив finanse-server целиком." }
+  Copy-Item $Web -Destination (Join-Path $Target 'web') -Recurse -Force
+  $WebSetting = "$Target\web"
+}
 
 $env:FINANSE_DATA = Join-Path $Target 'data'
 $Token = & $Node (Join-Path $Target 'server.mjs') --token
+
+# Кто занимает порт: название программы или пусто, если порт свободен.
+function Get-PortOwner([int]$LocalPort) {
+  $Ids = @(Get-NetTCPConnection -State Listen -LocalPort $LocalPort -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+  $Names = foreach ($Id in $Ids) {
+    # Процесс 4 — сама Windows: так выглядит сайт, работающий через IIS.
+    if ($Id -eq 4) { 'IIS (веб-сервер Windows)' } else { (Get-Process -Id $Id -ErrorAction SilentlyContinue).ProcessName }
+  }
+  return (@($Names) | Where-Object { $_ } | Select-Object -Unique) -join ', '
+}
+
+# Свой HTTPS возможен, только если порты 80 и 443 свободны: по ним выдаётся сертификат.
+# Если на сервере уже работает другой сайт, они заняты — тогда остаётся простой режим.
+if (-not $NoHttps) {
+  $Owners = @((Get-PortOwner 80), (Get-PortOwner 443)) | Where-Object { $_ } | Select-Object -Unique
+  if ($Owners) {
+    Write-Host ''
+    Write-Host "Порты 80 и 443 уже заняты: $($Owners -join ', ')." -ForegroundColor Yellow
+    Write-Host 'На этом сервере уже работает другой сайт, поэтому отдельный HTTPS для «Финансов» поставить нельзя.'
+    Write-Host "  1 - простой режим: адрес вида http://IP:$Port, без шифрования"
+    Write-Host '  2 - отменить установку'
+    if ((Read-Host 'Выберите 1 или 2').Trim() -ne '1') {
+      Write-Host 'Установка отменена.'
+      exit 1
+    }
+    $NoHttps = $true
+  }
+}
 
 # С HTTPS сервер слушает только сам компьютер, наружу его показывает прокси; без HTTPS — слушает всех.
 $BindHost = '127.0.0.1'
@@ -125,7 +161,7 @@ $RunServer = Join-Path $Target 'run-server.cmd'
   "set FINANSE_PORT=$Port",
   "set FINANSE_HOST=$BindHost",
   "set FINANSE_DATA=$Target\data",
-  "set FINANSE_WEB=$Target\web",
+  "set FINANSE_WEB=$WebSetting",
   "`"$Node`" `"$Target\server.mjs`" >> `"$Target\server.log`" 2>&1"
 ) | Set-Content -Path $RunServer -Encoding ASCII
 Register-Background $ServerTask $RunServer
@@ -134,10 +170,18 @@ $Address = ''
 $Notes = @()
 
 if ($NoHttps) {
+  # Правила от прежней установки с HTTPS больше не нужны.
+  Remove-NetFirewallRule -DisplayName 'Finanse HTTP' -ErrorAction SilentlyContinue
+  Remove-NetFirewallRule -DisplayName 'Finanse HTTPS' -ErrorAction SilentlyContinue
   Open-Port 'Finanse server' $Port
   $Ip = (Invoke-RestMethod 'https://api.ipify.org' -TimeoutSec 15).Trim()
   $Address = "http://${Ip}:$Port"
-  $Notes += 'Соединение не шифруется: ключ и данные идут по сети открытым текстом. Используйте только в закрытой сети или через VPN.'
+  $Notes += "Порт $Port должен быть открыт и в панели управления VPS, иначе адрес не откроется снаружи."
+  if ($ApiOnly) {
+    $Notes += 'Соединение не шифруется: ключ и данные идут по сети открытым текстом.'
+  } else {
+    $Notes += 'Соединение не шифруется: ключ и данные идут по сети открытым текстом. В браузере телефона в этом режиме не работают установка на главный экран и системные уведомления.'
+  }
 } else {
   # --- HTTPS: Caddy сам получает и продлевает сертификат ---
   if (-not $Domain) {
@@ -165,9 +209,6 @@ if ($NoHttps) {
     "`"$Caddy`" run --config `"$CaddyDir\Caddyfile`" --adapter caddyfile >> `"$CaddyDir\caddy.log`" 2>&1"
   ) | Set-Content -Path $RunProxy -Encoding ASCII
 
-  $Busy = Get-NetTCPConnection -State Listen -LocalPort 80, 443 -ErrorAction SilentlyContinue
-  if ($Busy) { $Notes += 'Порт 80 или 443 уже занят другой программой (часто это IIS). Остановите её, иначе HTTPS не заработает.' }
-
   Open-Port 'Finanse HTTP' 80
   Open-Port 'Finanse HTTPS' 443
   Register-Background $ProxyTask $RunProxy
@@ -194,10 +235,23 @@ $Summary = @(
   "Адрес:        $Address",
   "Ключ доступа: $Token",
   '',
-  'Как подключиться:',
-  "  1. Откройте $Address в браузере на компьютере или телефоне.",
-  '  2. В приложении: «Ещё» -> «Синхронизация между устройствами» -> введите ключ -> «Подключить».',
-  '  3. На телефоне: меню браузера -> «Установить приложение» или «На главный экран».',
+  "Строка подключения: $Address#$Token",
+  '',
+  'Как подключиться:'
+)
+if ($ApiOnly) {
+  $Summary += @(
+    '  1. Установите приложение «Финансы» на компьютер или телефон.',
+    '  2. В приложении: «Ещё» -> «Синхронизация между устройствами».',
+    '  3. Вставьте строку подключения в поле адреса и нажмите «Подключить».'
+  )
+} else {
+  $Summary += @(
+    "  1. Откройте $Address в браузере на компьютере или телефоне, либо установите приложение «Финансы».",
+    '  2. В приложении: «Ещё» -> «Синхронизация между устройствами» -> вставьте строку подключения в поле адреса -> «Подключить».'
+  )
+}
+$Summary += @(
   '',
   "База и ключ: $Target\data",
   "Журнал:      $Target\server.log"
