@@ -151,7 +151,7 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
                               {dueText(s, day)} · {formatDate(s.nextDate)}
                             </span>
                           </span>
-                          <span className={isIncome ? 'amount income' : 'amount'}>
+                          <span className={isIncome ? 'amount split income' : 'amount split'}>
                             {isIncome ? '+' : ''}
                             {formatAmount(s.amount, s.currency)}
                             <span className="muted">

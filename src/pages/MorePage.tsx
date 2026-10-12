@@ -50,6 +50,8 @@ export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void })
     if (!file) return
     try {
       const count = await importBackup(await file.text())
+      // У записей из файла старое время изменения: обычный обмен их не заметит, поэтому сверяем всё целиком.
+      void syncNow(true).catch(() => {})
       setMessage(count === 0 ? 'В файле нет ничего новее, чем на этом устройстве.' : `Обновлено записей: ${count}.`)
     } catch (err) {
       setMessage(`Не удалось импортировать: ${err instanceof Error ? err.message : String(err)}`)
@@ -225,13 +227,13 @@ function SyncCard() {
         {status.state === 'syncing'
           ? 'Идёт обмен…'
           : status.lastOk
-            ? `Последняя синхронизация: ${formatDate(isoDate(new Date(status.lastOk)))} в ${timeFormat.format(status.lastOk)}.`
+            ? `Последняя синхронизация: ${formatDate(isoDate(new Date(status.lastOk)))} в ${timeFormat.format(status.lastOk)} — отправлено записей: ${status.lastPushed}, получено: ${status.lastPulled}.`
             : 'Обмена ещё не было.'}
       </p>
       {status.state === 'error' && <p className="error">{status.error}</p>}
       <div className="actions">
         <ConfirmButton label="Отключить" armedLabel="Точно отключить?" onConfirm={disconnectSync} />
-        <button type="button" className="primary" disabled={status.state === 'syncing'} onClick={() => void syncNow().catch(() => {})}>
+        <button type="button" className="primary" disabled={status.state === 'syncing'} onClick={() => void syncNow(true).catch(() => {})}>
           Синхронизировать сейчас
         </button>
       </div>

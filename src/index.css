@@ -712,6 +712,19 @@ input::placeholder {
   font-weight: 400;
 }
 
+/* Узкий экран: пояснение к сумме уходит на вторую строку, иначе названию не остаётся места. */
+@media (max-width: 519px) {
+  .amount.split {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .amount.split .muted {
+    display: block;
+    font-size: 0.8rem;
+  }
+}
+
 .chevron {
   display: grid;
 }

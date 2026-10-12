@@ -129,8 +129,35 @@ try {
   const renamed = afterRename.changes.accounts.find((a) => a.id === pushed.id)
   if (renamed?.name !== 'Общий счёт переименован') throw new Error(`правка не ушла на сервер сама: ${renamed?.name}`)
 
+  // Импорт копии на уже подключённом устройстве: у её записей старое время изменения,
+  // но на сервер они всё равно должны попасть.
+  await step(async () => {
+    const { waitFor, click, sleep } = window.__h
+    click('nav button', 'Ещё')
+    await waitFor('Импорт из файла')
+    const old = { createdAt: 1000, updatedAt: 1000, deletedAt: null }
+    const backup = {
+      app: 'finanse',
+      version: 1,
+      exportedAt: 2000,
+      accounts: [{ ...old, id: 'imported-account', name: 'Из старой копии', kind: 'regular', currency: 'RUB', initialBalance: 77700 }],
+      categories: [],
+      transactions: [],
+      subscriptions: [],
+    }
+    const input = document.querySelector('input[type="file"]')
+    const files = new DataTransfer()
+    files.items.add(new File([JSON.stringify(backup)], 'finanse-old.json', { type: 'application/json' }))
+    input.files = files.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await waitFor('Обновлено записей: 1')
+    await sleep(1500)
+  })
+  const afterImport = await asOtherDevice({ since: 0, changes: {} })
+  if (!afterImport.changes.accounts.some((a) => a.id === 'imported-account')) throw new Error('счёт из импортированной копии не попал на сервер')
+
   // Третье устройство меняет тот же счёт позже — второе получает правку при обмене.
-  await asOtherDevice({ since: afterRename.rev, changes: { accounts: [{ ...renamed, name: 'Изменено с телефона', updatedAt: Date.now() + 1000 }] } })
+  await asOtherDevice({ since: afterImport.rev, changes: { accounts: [{ ...renamed, name: 'Изменено с телефона', updatedAt: Date.now() + 1000 }] } })
   await step(async () => {
     const { waitFor, click } = window.__h
     click('nav button', 'Ещё')
@@ -150,7 +177,7 @@ try {
     await waitFor('Изменено с телефона')
   })
 
-  console.log('Синхронизация работает: отправка, получение на чистом устройстве, правки в обе стороны.')
+  console.log('Синхронизация работает: отправка, получение на чистом устройстве, правки в обе стороны, импорт копии.')
 } catch (error) {
   console.log('ОШИБКА синхронизации:', error.message)
   failed = true

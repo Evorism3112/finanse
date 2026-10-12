@@ -17,6 +17,9 @@ interface SyncConfig {
   /** Время начала прошлого обмена по часам устройства: всё, что изменено позже, ещё не отправлено. */
   pushedAt: number
   lastOk: number | null
+  /** Сколько записей ушло и пришло при последнем обмене — чтобы было видно, что он не пустой. */
+  lastPushed?: number
+  lastPulled?: number
 }
 
 export interface SyncStatus {
@@ -25,6 +28,8 @@ export interface SyncStatus {
   state: 'idle' | 'syncing' | 'error'
   error: string
   lastOk: number | null
+  lastPushed: number
+  lastPulled: number
 }
 
 function loadConfig(): SyncConfig | null {
@@ -47,7 +52,15 @@ const listeners = new Set<() => void>()
 let status: SyncStatus = describe(loadConfig(), 'idle', '')
 
 function describe(config: SyncConfig | null, state: SyncStatus['state'], error: string): SyncStatus {
-  return { connected: config !== null, url: config?.url ?? '', state, error, lastOk: config?.lastOk ?? null }
+  return {
+    connected: config !== null,
+    url: config?.url ?? '',
+    state,
+    error,
+    lastOk: config?.lastOk ?? null,
+    lastPushed: config?.lastPushed ?? 0,
+    lastPulled: config?.lastPulled ?? 0,
+  }
 }
 
 function setStatus(state: SyncStatus['state'], error = ''): void {
@@ -114,15 +127,26 @@ async function request(config: Pick<SyncConfig, 'url' | 'token'>, path: string, 
 
 let running: Promise<void> | null = null
 
-/** Один обмен: отправить свои правки, получить и применить чужие. Параллельные вызовы сливаются в один. */
-export function syncNow(): Promise<void> {
-  running ??= exchange().finally(() => (running = null))
+/**
+ * Один обмен: отправить свои правки, получить и применить чужие. Параллельные вызовы сливаются в один.
+ *
+ * Обычный обмен передаёт только изменённое с прошлого раза. Полный (full) сверяет всё целиком:
+ * он нужен после импорта копии — у её записей старое время изменения, и обычный обмен их не замечает, —
+ * и служит кнопкой «починить», если устройства разошлись.
+ */
+export function syncNow(full = false): Promise<void> {
+  if (running && full) {
+    // Идущий обмен мог быть обычным — после него делаем полный.
+    return running.catch(() => {}).then(() => syncNow(true))
+  }
+  running ??= exchange(full).finally(() => (running = null))
   return running
 }
 
-async function exchange(): Promise<void> {
-  const config = loadConfig()
-  if (!config) return
+async function exchange(full: boolean): Promise<void> {
+  const stored = loadConfig()
+  if (!stored) return
+  const config = full ? { ...stored, rev: 0, pushedAt: 0 } : stored
   setStatus('syncing')
   try {
     // Время берём до чтения базы: правка, сделанная во время обмена, уйдёт в следующий раз.
@@ -134,11 +158,12 @@ async function exchange(): Promise<void> {
       subscriptions: changedSince(await db.subscriptions.toArray(), config.pushedAt),
     }
     const answer = (await request(config, '/api/sync', { since: config.rev, changes })) as { rev: number; changes: Records }
-    await mergeRecords(normalizeRecords(answer.changes))
+    const pulled = await mergeRecords(normalizeRecords(answer.changes))
+    const pushed = changes.accounts.length + changes.categories.length + changes.transactions.length + changes.subscriptions.length
     // Конфигурацию могли сменить, пока шёл обмен, — тогда этот результат уже не про неё.
     const now = loadConfig()
     if (now && now.url === config.url && now.token === config.token) {
-      saveConfig({ ...now, rev: answer.rev, pushedAt: startedAt, lastOk: Date.now() })
+      saveConfig({ ...now, rev: answer.rev, pushedAt: startedAt, lastOk: Date.now(), lastPushed: pushed, lastPulled: pulled })
     }
     setStatus('idle')
   } catch (error) {
