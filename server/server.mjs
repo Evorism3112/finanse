@@ -5,7 +5,8 @@
 //   node server.mjs            запустить
 //   node server.mjs --token    показать ключ доступа и выйти
 //
-// Настройки — переменными окружения: FINANSE_PORT (8787), FINANSE_DATA (папка с базой), FINANSE_WEB (папка с приложением).
+// Настройки — переменными окружения: FINANSE_PORT (8787), FINANSE_DATA (папка с базой), FINANSE_WEB (папка с приложением),
+// FINANSE_HOST (0.0.0.0; 127.0.0.1 — принимать запросы только с этого компьютера, когда перед сервером стоит HTTPS-прокси).
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -143,6 +144,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const dataDir = resolve(process.env.FINANSE_DATA ?? join(here, 'data'))
   const webDir = resolve(process.env.FINANSE_WEB ?? (existsSync(join(here, 'web')) ? join(here, 'web') : join(here, '..', 'dist')))
   const port = Number(process.env.FINANSE_PORT ?? 8787)
+  const host = process.env.FINANSE_HOST ?? '0.0.0.0'
 
   if (process.argv.includes('--token')) {
     console.log(loadToken(dataDir))
@@ -150,12 +152,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
 
   const { server, token } = createApp({ dataDir, webDir })
-  server.listen(port, '0.0.0.0', () => {
+  server.listen(port, host, () => {
     console.log('Сервер «Финансов» запущен.')
     console.log(`  Данные:       ${dataDir}`)
     console.log(`  Ключ доступа: ${token}`)
-    console.log('  Адрес для других устройств в этой сети:')
-    for (const address of lanAddresses()) console.log(`    http://${address}:${port}`)
+    if (host === '0.0.0.0') {
+      console.log('  Адрес для других устройств в этой сети:')
+      for (const address of lanAddresses()) console.log(`    http://${address}:${port}`)
+    } else {
+      console.log(`  Принимает запросы только на ${host} — снаружи доступен через HTTPS-прокси.`)
+    }
     console.log(`  На этом компьютере: http://localhost:${port}`)
   })
 }

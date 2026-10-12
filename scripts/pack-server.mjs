@@ -15,7 +15,7 @@ if (!existsSync(join(root, 'dist', 'index.html'))) {
 
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
-for (const file of ['server.mjs', 'sync.mjs', 'install.sh', 'install.ps1']) cpSync(join(root, 'server', file), join(out, file))
+for (const file of ['server.mjs', 'sync.mjs', 'install.sh', 'install.ps1', 'install-vps.ps1', 'install-vps.cmd']) cpSync(join(root, 'server', file), join(out, file))
 cpSync(join(root, 'dist'), join(out, 'web'), { recursive: true })
 
 // Архив — для переноса одним файлом. Пробуем то, что есть в системе; если ничего нет, остаётся просто папка.

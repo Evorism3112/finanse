@@ -1,4 +1,4 @@
-# Установщик сервера синхронизации «Финансов» для Windows.
+﻿# Установщик сервера синхронизации «Финансов» для Windows.
 #
 #   powershell -ExecutionPolicy Bypass -File install.ps1               установить и запускать при входе в систему
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall    убрать автозапуск (база остаётся на месте)
@@ -10,6 +10,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $Target = Join-Path $env:LOCALAPPDATA 'finanse-server'
 $TaskName = 'FinanseServer'
 
