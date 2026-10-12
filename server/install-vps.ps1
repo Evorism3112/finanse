@@ -3,10 +3,11 @@
 # Ставит сервер синхронизации с базой и само приложение, запускает их в фоне при старте Windows
 # и включает HTTPS, чтобы приложением можно было пользоваться из интернета — с компьютера и с телефона.
 #
-#   install-vps.cmd                       обычная установка (запускать от имени администратора)
-#   install-vps.cmd -Domain my.site.ru    со своим доменом (он уже должен указывать на этот сервер)
-#   install-vps.cmd -NoHttps              без HTTPS, только http://адрес:8787 — для закрытой сети
-#   install-vps.cmd -Uninstall            убрать службы и правила брандмауэра (база остаётся)
+# Обычно запускается из меню Finanse.cmd. Напрямую, от имени администратора:
+#   powershell -ExecutionPolicy Bypass -File install-vps.ps1                       обычная установка
+#   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -Domain my.site.ru    со своим доменом (он уже должен указывать на этот сервер)
+#   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -NoHttps              без HTTPS, только http://адрес:8787 — для закрытой сети
+#   powershell -ExecutionPolicy Bypass -File install-vps.ps1 -Uninstall            убрать службы и правила брандмауэра (база остаётся)
 #
 # Без своего домена используется бесплатное имя вида 1-2-3-4.sslip.io: оно указывает на адрес 1.2.3.4,
 # и на него выпускается обычный сертификат Let's Encrypt.
@@ -30,13 +31,20 @@ $Rules = @('Finanse HTTP', 'Finanse HTTPS', 'Finanse server')
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $IsAdmin = (New-Object Security.Principal.WindowsPrincipal $Identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $IsAdmin) {
-  Write-Host 'Нужны права администратора. Запустите install-vps.cmd правой кнопкой: «Запуск от имени администратора».'
+  Write-Host 'Нужны права администратора. Откройте Finanse.cmd — он запросит их сам.'
   exit 1
 }
 
 function Remove-Task([string]$Name) {
   Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+# Остановка задачи не всегда завершает запущенную ею программу, а работающий файл нельзя заменить новым.
+function Stop-Workers {
+  Get-CimInstance Win32_Process -Filter "Name = 'node.exe' OR Name = 'caddy.exe'" |
+    Where-Object { $_.CommandLine -like "*$Target*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 # Фоновая задача: стартует вместе с Windows от имени системы, без окна и без входа пользователя;
@@ -60,6 +68,7 @@ function Open-Port([string]$Name, [int]$LocalPort) {
 if ($Uninstall) {
   Remove-Task $ServerTask
   Remove-Task $ProxyTask
+  Stop-Workers
   foreach ($Rule in $Rules) { Remove-NetFirewallRule -DisplayName $Rule -ErrorAction SilentlyContinue }
   Write-Host "Службы и правила брандмауэра убраны. База и ключ остались в $Target\data."
   exit 0
@@ -96,6 +105,7 @@ Write-Host "Node.js: $(& $Node --version)"
 # --- файлы сервера и приложения ---
 Remove-Task $ServerTask
 Remove-Task $ProxyTask
+Stop-Workers
 New-Item -ItemType Directory -Force -Path (Join-Path $Target 'data') | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'server.mjs'), (Join-Path $PSScriptRoot 'sync.mjs') -Destination $Target -Force
 $Web = Join-Path $PSScriptRoot 'web'

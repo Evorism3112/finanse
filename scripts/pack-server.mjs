@@ -1,5 +1,5 @@
 // Собирает сервер синхронизации в одну папку, которую можно унести на другой компьютер:
-// release/finanse-server/ — сам сервер, установщики и собранное приложение в web/.
+// release/finanse-server/ — сам сервер, установщики, меню Finanse.cmd и собранное приложение в web/.
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -15,8 +15,15 @@ if (!existsSync(join(root, 'dist', 'index.html'))) {
 
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
-for (const file of ['server.mjs', 'sync.mjs', 'install.sh', 'install.ps1', 'install-vps.ps1', 'install-vps.cmd']) cpSync(join(root, 'server', file), join(out, file))
+for (const file of ['server.mjs', 'sync.mjs', 'install.sh', 'install.ps1', 'install-vps.ps1', 'menu.ps1']) cpSync(join(root, 'server', file), join(out, file))
+cpSync(join(root, 'Finanse.cmd'), join(out, 'Finanse.cmd'))
 cpSync(join(root, 'dist'), join(out, 'web'), { recursive: true })
+
+// Та же сборка приложения кладётся в server/web и хранится в репозитории: тогда установщик работает
+// и из проекта, скачанного с GitHub целиком, без отдельного архива.
+const repoWeb = join(root, 'server', 'web')
+rmSync(repoWeb, { recursive: true, force: true })
+cpSync(join(root, 'dist'), repoWeb, { recursive: true })
 
 // Архив — для переноса одним файлом. Пробуем то, что есть в системе; если ничего нет, остаётся просто папка.
 const release = join(root, 'release')

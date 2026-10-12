@@ -142,7 +142,8 @@ function lanAddresses() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dataDir = resolve(process.env.FINANSE_DATA ?? join(here, 'data'))
-  const webDir = resolve(process.env.FINANSE_WEB ?? (existsSync(join(here, 'web')) ? join(here, 'web') : join(here, '..', 'dist')))
+  // В папке проекта свежая сборка лежит в dist; в установленной копии её нет, там приложение в web.
+  const webDir = resolve(process.env.FINANSE_WEB ?? (existsSync(join(here, '..', 'dist', 'index.html')) ? join(here, '..', 'dist') : join(here, 'web')))
   const port = Number(process.env.FINANSE_PORT ?? 8787)
   const host = process.env.FINANSE_HOST ?? '0.0.0.0'
 
