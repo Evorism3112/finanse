@@ -81,6 +81,28 @@ export function installmentAt(parts: Installment[], date: string): Installment |
   return parts.find((p) => installmentDate(year, month - 1, p.day) === date)
 }
 
+/**
+ * Что станет с записью после отметки «Оплачено» / «Получено».
+ * Фактическая сумма может отличаться от плановой (премия, проценты); план меняется, только если remember.
+ */
+export function advanceSubscription(
+  sub: Pick<Subscription, 'amount' | 'period' | 'nextDate' | 'installments'>,
+  actualAmount: number,
+  remember: boolean,
+): Pick<Subscription, 'amount' | 'nextDate' | 'installments'> {
+  if (sub.installments?.length) {
+    const current = installmentAt(sub.installments, sub.nextDate)
+    const installments = remember ? sub.installments.map((p) => (p === current ? { ...p, amount: actualAmount } : p)) : sub.installments
+    const next = nextInstallment(installments, sub.nextDate)
+    return { installments, nextDate: next.date, amount: next.amount }
+  }
+  return {
+    installments: null,
+    nextDate: addPeriod(sub.nextDate, sub.period),
+    amount: remember ? actualAmount : sub.amount,
+  }
+}
+
 /** Сколько уходит на подписки в месяц, по валютам. */
 export function monthlyTotals(subs: Subscription[]): [string, number][] {
   const totals = new Map<string, number>()

@@ -1,7 +1,7 @@
 {
   "name": "finanse",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,11 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "npm run build && node e2e/run.mjs"
+    "test:e2e": "npm run build && node e2e/run.mjs",
+    "desktop": "npm run build && electron .",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:server": "npm run build && node scripts/pack-server.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.6",
@@ -22,10 +26,49 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.3"
-  }
+  },
+  "description": "Учёт личных финансов",
+  "author": "evgeniy",
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "app.finanse.desktop",
+    "productName": "Finanse",
+    "artifactName": "Finanse-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "icon": "public/icon-512.png",
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "synopsis": "Учёт личных финансов",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Финансы"
+    }
+  },
+  "desktopName": "finanse.desktop"
 }

@@ -321,7 +321,12 @@ nav button.active {
   font-weight: 500;
 }
 
-.row:hover {
+/* Подсвечивается весь пункт списка: у него под строкой может быть кнопка действия. */
+.list li {
+  transition: background-color 0.15s;
+}
+
+.list li:hover {
   background: var(--surface-2);
 }
 
@@ -1420,4 +1425,51 @@ button:disabled {
 .trend-col.active .trend-label {
   color: var(--accent);
   font-weight: 700;
+}
+
+.split-main > section:first-child > .group-head {
+  margin-top: 6px;
+}
+
+.group-total .muted {
+  font-weight: 400;
+}
+
+/* Подтверждение необратимого действия вторым нажатием */
+
+.danger.armed,
+.chip.armed {
+  background: var(--expense);
+  color: #fff;
+}
+
+/* Автокопии */
+
+.snapshots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.snapshots li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.snapshots li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* Экран ошибки */
+
+.crash {
+  max-width: 560px;
+  margin: 10vh auto 0;
+}
+
+.crash .error {
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
 }

@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState, type FormEvent } from 'react'
-import { accountLabel } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { DateInput } from '../components/DateInput'
 import { BellIcon, PlusIcon } from '../components/Icons'
+import { ConfirmButton } from '../components/ConfirmButton'
 import { Modal } from '../components/Modal'
 import { Select } from '../components/Select'
 import { formatDate, today } from '../dates'
@@ -31,6 +31,7 @@ import {
   installmentsTotal,
   isDue,
   monthlyTotals,
+  advanceSubscription,
   PERIODS,
   upcomingInstallment,
 } from '../subscriptions'
@@ -41,6 +42,12 @@ const REMIND_OPTIONS: [number, string][] = [
   [3, 'За 3 дня'],
   [7, 'За неделю'],
   [14, 'За 2 недели'],
+]
+
+/** Группы списка: сначала доходы, потом расходы. */
+const GROUPS: [CategoryKind, string, string][] = [
+  ['income', 'Доходы', '💰'],
+  ['expense', 'Расходы', '🔁'],
 ]
 
 const DIRECTIONS: [CategoryKind, string][] = [
@@ -55,6 +62,7 @@ const shortPeriod = (period: Period) => PERIODS.find((p) => p.period === period)
 
 export function SubscriptionsPage({ accounts, categories, subscriptions, day }: Data & { day: string }) {
   const [editing, setEditing] = useState<Subscription | 'new' | null>(null)
+  const [paying, setPaying] = useState<Subscription | null>(null)
   const [permission, setPermission] = useState(notifyState)
 
   const sorted = useMemo(
@@ -63,15 +71,6 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
   )
   const expenses = useMemo(() => monthlyTotals(subscriptions.filter((s) => s.direction === 'expense')), [subscriptions])
   const incomes = useMemo(() => monthlyTotals(subscriptions.filter((s) => s.direction === 'income')), [subscriptions])
-
-  /** Отметка прямо из списка: счёт и категория могли быть удалены после создания записи. */
-  function payNow(s: Subscription) {
-    void paySubscription({
-      ...s,
-      accountId: accounts.some((a) => a.id === s.accountId) ? s.accountId : null,
-      categoryId: categories.some((c) => c.id === s.categoryId) ? s.categoryId : null,
-    })
-  }
 
   return (
     <>
@@ -117,42 +116,63 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
             </p>
           )}
 
-          {sorted.length > 0 && (
-            <ul className="list">
-              {sorted.map((s) => {
-                const due = isDue(s, day)
-                return (
-                  <li key={s.id}>
-                    <button type="button" className="row" onClick={() => setEditing(s)}>
-                      <Avatar id={s.id} label={s.name} />
-                      <span className="row-main">
-                        <span>{s.name}</span>
-                        <span className={`muted wrap${due ? (daysUntil(s.nextDate, day) < 0 ? ' overdue' : ' soon') : ''}`}>
-                          {dueText(s, day)} · {formatDate(s.nextDate)}
-                        </span>
+          {GROUPS.map(([direction, title, icon]) => {
+            const items = sorted.filter((s) => s.direction === direction)
+            if (items.length === 0) return null
+            const isIncome = direction === 'income'
+            return (
+              <section key={direction}>
+                <div className="group-head">
+                  <h3>
+                    <span aria-hidden="true">{icon}</span>
+                    {title}
+                    <span className="count">{items.length}</span>
+                  </h3>
+                  <span className="group-total">
+                    {(isIncome ? incomes : expenses).map(([currency, total]) => (
+                      <span key={currency} className={isIncome ? 'amount income' : 'amount'}>
+                        {isIncome ? '+' : ''}
+                        {formatAmount(total, currency)}
+                        <span className="muted"> в мес.</span>
                       </span>
-                      <span className={s.direction === 'income' ? 'amount income' : 'amount'}>
-                        {s.direction === 'income' ? '+' : ''}
-                        {formatAmount(s.amount, s.currency)}
-                        <span className="muted">
-                          {s.installments?.length
-                            ? ` из ${formatAmount(installmentsTotal(s.installments), s.currency)} в мес.`
-                            : ` / ${shortPeriod(s.period)}`}
-                        </span>
-                      </span>
-                    </button>
-                    {due && (
-                      <div className="row-actions">
-                        <button type="button" className="chip" onClick={() => payNow(s)}>
-                          {s.direction === 'income' ? 'Получено' : 'Оплачено'}
+                    ))}
+                  </span>
+                </div>
+                <ul className="list">
+                  {items.map((s) => {
+                    const due = isDue(s, day)
+                    return (
+                      <li key={s.id}>
+                        <button type="button" className="row" onClick={() => setEditing(s)}>
+                          <Avatar id={s.id} label={s.name} />
+                          <span className="row-main">
+                            <span>{s.name}</span>
+                            <span className={`muted wrap${due ? (daysUntil(s.nextDate, day) < 0 ? ' overdue' : ' soon') : ''}`}>
+                              {dueText(s, day)} · {formatDate(s.nextDate)}
+                            </span>
+                          </span>
+                          <span className={isIncome ? 'amount income' : 'amount'}>
+                            {isIncome ? '+' : ''}
+                            {formatAmount(s.amount, s.currency)}
+                            <span className="muted">
+                              {s.installments?.length
+                                ? ` из ${formatAmount(installmentsTotal(s.installments), s.currency)} в мес.`
+                                : ` / ${shortPeriod(s.period)}`}
+                            </span>
+                          </span>
                         </button>
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                        <div className="row-actions">
+                          <button type="button" className="chip" onClick={() => setPaying(s)}>
+                            {isIncome ? 'Получено' : 'Оплачено'}
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )
+          })}
         </div>
       </div>
 
@@ -168,6 +188,8 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
           onClose={() => setEditing(null)}
         />
       )}
+
+      {paying && <PayForm sub={paying} accounts={accounts} categories={categories} onClose={() => setPaying(null)} />}
     </>
   )
 }
@@ -280,21 +302,13 @@ function SubscriptionForm({
     onClose()
   }
 
-  async function pay() {
-    const fields = readFields()
-    if (!sub || !fields) return
-    await paySubscription({ ...sub, ...fields })
-    onClose()
-  }
-
   async function remove() {
-    if (!sub || !confirm(`Удалить «${sub.name}»?`)) return
+    if (!sub) return
     await db.subscriptions.update(sub.id, deleted())
     onClose()
   }
 
   const dateLabel = isIncome ? 'Следующее поступление' : autoRenew ? 'Следующее списание' : 'Оплачена до'
-  const doneLabel = isIncome ? 'Получено' : 'Оплачено'
 
   return (
     <Modal wide title={sub ? 'Регулярный платёж' : 'Новый регулярный платёж'} onClose={onClose}>
@@ -419,28 +433,106 @@ function SubscriptionForm({
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
 
-        {sub && (
-          <p className="hint">
-            «{doneLabel}» переносит дату на следующий период
-            {account ? ` и записывает ${isIncome ? 'доход' : 'расход'}: ${accountLabel(account)}.` : '.'}
-          </p>
-        )}
-
         {error && <p className="error">{error}</p>}
 
         <div className="actions">
           {sub && (
-            <>
-              <button type="button" className="danger" onClick={remove}>
-                Удалить
-              </button>
-              <button type="button" onClick={pay}>
-                {doneLabel}
-              </button>
-            </>
+            <ConfirmButton label="Удалить" onConfirm={remove} />
           )}
           <button type="submit" className="primary">
             Сохранить
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/**
+ * Отметка «Получено» / «Оплачено»: фактическая сумма может отличаться от плановой —
+ * зарплата с процентами, счёт за свет — поэтому её можно поправить перед записью.
+ */
+function PayForm({
+  sub,
+  accounts,
+  categories,
+  onClose,
+}: {
+  sub: Subscription
+  accounts: Account[]
+  categories: Category[]
+  onClose: () => void
+}) {
+  const isIncome = sub.direction === 'income'
+  // Запись ведётся в своей валюте, поэтому подходят только счета в ней.
+  const usable = accounts.filter((a) => a.currency === sub.currency)
+  const money = (minor: number) => formatAmount(minor, sub.currency)
+
+  const [amount, setAmount] = useState(amountToInput(sub.amount))
+  const [date, setDate] = useState(today)
+  const [accountId, setAccountId] = useState(usable.some((a) => a.id === sub.accountId) ? sub.accountId! : '')
+  const [remember, setRemember] = useState(false)
+  const [error, setError] = useState('')
+
+  const parsed = parseAmount(amount)
+  const changed = parsed !== null && parsed > 0 && parsed !== sub.amount
+  const next = advanceSubscription(sub, parsed ?? sub.amount, remember && changed)
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    if (parsed === null || parsed <= 0) return setError('Введите сумму больше нуля')
+    if (!date) return setError('Укажите дату')
+    await paySubscription(
+      // Категорию могли удалить после создания записи.
+      { ...sub, categoryId: categories.some((c) => c.id === sub.categoryId) ? sub.categoryId : null },
+      { amount: parsed, date, accountId: accountId || null, remember: remember && changed },
+    )
+    onClose()
+  }
+
+  return (
+    <Modal title={`${isIncome ? 'Получено' : 'Оплачено'}: ${sub.name}`} onClose={onClose}>
+      <form onSubmit={save}>
+        <label>
+          {isIncome ? 'Сколько пришло' : 'Сколько списали'}, {sub.currency}
+          <input className="amount-input" inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
+        </label>
+
+        {changed && (
+          <>
+            <p className="hint">По плану было {money(sub.amount)}.</p>
+            <label className="check">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Запомнить новую сумму как плановую
+            </label>
+          </>
+        )}
+
+        <label>
+          Дата
+          <DateInput value={date} onChange={setDate} />
+        </label>
+
+        <label>
+          {isIncome ? 'Счёт зачисления' : 'Счёт списания'}
+          <Select
+            title={isIncome ? 'Счёт зачисления' : 'Счёт списания'}
+            value={accountId}
+            onChange={setAccountId}
+            options={[{ value: '', label: 'Не записывать операцию', icon: <Avatar label="—" /> }, ...accountOptions(usable)]}
+          />
+        </label>
+
+        <p className="hint">
+          {accountId ? '' : 'Операция записана не будет, срок просто перенесётся. '}
+          {isIncome ? 'Следующее поступление' : 'Следующий платёж'}: {formatDate(next.nextDate)}, {money(next.amount)}.
+        </p>
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="actions">
+          <button type="submit" className="primary">
+            {isIncome ? 'Получено' : 'Оплачено'}
           </button>
         </div>
       </form>

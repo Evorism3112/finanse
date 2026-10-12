@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { accountLabel } from './accountKinds'
+import { changedSince, normalizeServerUrl } from './sync'
 import { assignSlots } from './chartColors'
 import { dayLabel, formatDate, parseDate, shiftMonth } from './dates'
 import { normalizeCategory, normalizeSubscription } from './db'
@@ -8,6 +9,7 @@ import { parseBackup, pickNewer } from './merge'
 import { amountToInput, parseAmount, parseRate } from './money'
 import {
   addPeriod,
+  advanceSubscription,
   daysUntil,
   dueText,
   installmentAt,
@@ -574,5 +576,61 @@ describe('доход несколькими выплатами в месяц', (
     // В месячный итог идёт сумма всех выплат, а не только ближайшая.
     expect(monthlyTotals([salary])).toEqual([['RUB', 6000000]])
     expect(normalizeSubscription({ id: 's', direction: 'income' } as Subscription).installments).toBeNull()
+  })
+})
+
+describe('отметка с фактической суммой', () => {
+  const monthly = { amount: 6000000, period: 'month' as const, nextDate: '2026-10-25', installments: null }
+  const parts = [
+    { day: 10, amount: 3600000 },
+    { day: 25, amount: 2400000 },
+  ]
+  const split = { amount: 2400000, period: 'month' as const, nextDate: '2026-10-25', installments: parts }
+
+  test('разовое отклонение не меняет план', () => {
+    expect(advanceSubscription(monthly, 6750000, false)).toEqual({ installments: null, nextDate: '2026-11-25', amount: 6000000 })
+    expect(advanceSubscription(split, 2950000, false)).toEqual({ installments: parts, nextDate: '2026-11-10', amount: 3600000 })
+  })
+
+  test('«запомнить» делает фактическую сумму плановой', () => {
+    expect(advanceSubscription(monthly, 6750000, true)).toEqual({ installments: null, nextDate: '2026-11-25', amount: 6750000 })
+    // У записи из нескольких выплат меняется только та выплата, которую отметили.
+    expect(advanceSubscription(split, 2950000, true)).toEqual({
+      installments: [
+        { day: 10, amount: 3600000 },
+        { day: 25, amount: 2950000 },
+      ],
+      nextDate: '2026-11-10',
+      amount: 3600000,
+    })
+    expect(parts[1].amount).toBe(2400000)
+  })
+
+  test('другие периоды', () => {
+    expect(advanceSubscription({ ...monthly, period: 'year' }, 1, false).nextDate).toBe('2027-10-25')
+    expect(advanceSubscription({ ...monthly, period: 'week' }, 1, false).nextDate).toBe('2026-11-01')
+  })
+})
+
+describe('синхронизация: подготовка на устройстве', () => {
+  test('normalizeServerUrl', () => {
+    expect(normalizeServerUrl('192.168.1.10:8787')).toBe('http://192.168.1.10:8787')
+    expect(normalizeServerUrl('  http://192.168.1.10:8787/  ')).toBe('http://192.168.1.10:8787')
+    expect(normalizeServerUrl('https://finanse.example.com/sync/')).toBe('https://finanse.example.com/sync')
+    expect(normalizeServerUrl('localhost:8787')).toBe('http://localhost:8787')
+    expect(normalizeServerUrl('')).toBeNull()
+    expect(normalizeServerUrl('   ')).toBeNull()
+    expect(normalizeServerUrl('http://')).toBeNull()
+  })
+
+  test('changedSince отбирает только правки после прошлого обмена', () => {
+    const records = [
+      { ...synced, id: 'a', updatedAt: 0 },
+      { ...synced, id: 'b', updatedAt: 100 },
+      { ...synced, id: 'c', updatedAt: 101 },
+    ]
+    expect(changedSince(records, 100).map((r) => r.id)).toEqual(['c'])
+    // Первый обмен: уходит всё, кроме нетронутых стандартных категорий (у них время изменения 0).
+    expect(changedSince(records, 0).map((r) => r.id)).toEqual(['b', 'c'])
   })
 })

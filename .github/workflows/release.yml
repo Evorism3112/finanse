@@ -1,0 +1,56 @@
+# Собирает установщики для Windows и Linux и архив с сервером синхронизации.
+# Запускается при отправке метки версии (git tag v1.0.0 && git push --tags) или вручную на вкладке Actions.
+# Готовые файлы лежат в разделе Artifacts у завершённого запуска.
+name: Сборка установщиков
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: Программа для ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux, os: ubuntu-latest, script: 'dist:linux' }
+          - { name: Windows, os: windows-latest, script: 'dist:win' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run ${{ matrix.script }}
+        env:
+          # Подписи кода нет: установщик собирается без неё.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finanse-${{ matrix.name }}
+          path: |
+            release/*.AppImage
+            release/*.exe
+          if-no-files-found: error
+
+  server:
+    name: Сервер синхронизации
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finanse-server
+          path: release/finanse-server.zip
+          if-no-files-found: error

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Avatar } from '../components/Avatar'
+import { ConfirmButton } from '../components/ConfirmButton'
 import { Modal } from '../components/Modal'
 import { db, deleted, newRecord, touched, type Category, type CategoryKind, type Data } from '../db'
 import { amountToInput, formatAmount, parseAmount } from '../money'
@@ -90,7 +91,7 @@ function CategoryForm({
   }
 
   async function remove() {
-    if (!category || !confirm(`Удалить категорию «${category.name}»? Её операции останутся без категории.`)) return
+    if (!category) return
     await db.categories.update(category.id, deleted())
     onClose()
   }
@@ -114,9 +115,7 @@ function CategoryForm({
 
         <div className="actions">
           {category && (
-            <button type="button" className="danger" onClick={remove}>
-              Удалить
-            </button>
+            <ConfirmButton label="Удалить" armedLabel="Удалить? Операции останутся без категории" onConfirm={remove} />
           )}
           <button type="submit" className="primary">
             Сохранить

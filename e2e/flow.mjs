@@ -1,34 +1,10 @@
-// Сквозной сценарий: проходит по приложению в headless Firefox через WebDriver BiDi.
+// Сквозной сценарий: проходит по всему приложению в настоящем браузере.
 // Запускается из run.mjs; первый аргумент — папка для скриншотов (необязательно).
-const PORT = process.env.E2E_BIDI_PORT ?? '9333'
-const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:4199/'
-const ws = new WebSocket(`ws://127.0.0.1:${PORT}/session`)
-let nextId = 1
-const pending = new Map()
-ws.onmessage = (e) => {
-  const msg = JSON.parse(e.data)
-  if (msg.id && pending.has(msg.id)) {
-    const { resolve, reject } = pending.get(msg.id)
-    pending.delete(msg.id)
-    if (msg.type === 'error') reject(new Error(`${msg.error}: ${msg.message}`))
-    else resolve(msg.result)
-  }
-}
-await new Promise((res, rej) => {
-  ws.onopen = res
-  ws.onerror = () => rej(new Error('нет соединения с Firefox'))
-})
-const send = (method, params = {}) =>
-  new Promise((resolve, reject) => {
-    const id = nextId++
-    pending.set(id, { resolve, reject })
-    ws.send(JSON.stringify({ id, method, params }))
-  })
+import { writeFileSync } from 'node:fs'
+import { APP_URL, connect } from './driver.mjs'
 
-await send('session.new', { capabilities: {} })
-const { contexts } = await send('browsingContext.getTree')
-const context = contexts[0].context
-await send('browsingContext.navigate', { context, url: APP_URL, wait: 'complete' })
+const browser = await connect()
+await browser.navigate(APP_URL)
 
 const flow = async () => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -144,8 +120,11 @@ const flow = async () => {
   await waitFor('молоко')
   ;[...document.querySelectorAll('.row')].find((r) => r.textContent.includes('молоко')).click()
   await waitFor('Удалить')
-  window.confirm = () => true
+  // Удаление подтверждается вторым нажатием на ту же кнопку, без системного окна.
   click('button', 'Удалить')
+  await waitFor('Точно удалить?')
+  if (!text().includes('молоко')) throw new Error('операция удалилась с первого нажатия')
+  click('button', 'Точно удалить?')
   await sleep(300)
   if (text().includes('молоко')) throw new Error('операция не удалилась')
   click('nav button', 'Счета')
@@ -251,6 +230,8 @@ const flow = async () => {
   click('nav button', 'Регулярные')
   await sleep(150)
   click('.chip', 'Оплачено')
+  await waitFor('Оплачено: Кино')
+  document.querySelector('.modal button[type="submit"]').click()
   await sleep(300)
   click('nav button', 'Операции')
   await waitFor('Счёт Карта · Кино')
@@ -273,11 +254,20 @@ const flow = async () => {
   fill('Следующее поступление', inDays(1))
   click('button', 'Сохранить')
   await waitFor('поступление завтра')
+  // Фактическая сумма отличается от плановой: в операции идёт она, а план остаётся прежним.
   click('.chip', 'Получено')
+  await waitFor('Получено: Зарплата основная')
+  fill('Сколько пришло', '93500')
+  await waitFor('По плану было')
+  document.querySelector('.modal button[type="submit"]').click()
   await sleep(300)
+  if (!norm(text()).includes('+90 000,00 ₽ / мес.')) throw new Error('плановая сумма изменилась:\n' + norm(text()))
+  // Списки доходов и расходов разделены.
+  const heads = [...document.querySelectorAll('.split-main .group-head h3')].map((h) => h.textContent)
+  if (heads.length !== 2 || !heads[0].includes('Доходы') || !heads[1].includes('Расходы')) throw new Error('группы: ' + heads.join(' | '))
   click('nav button', 'Операции')
   await waitFor('Счёт Карта · Зарплата основная')
-  if (!norm(text()).includes('+90 000,00')) throw new Error('доход по регулярной записи не появился')
+  if (!norm(text()).includes('+93 500,00')) throw new Error('доход на фактическую сумму не появился')
 
   // Доход двумя выплатами в месяц: аванс и основная часть отмечаются по отдельности.
   click('nav button', 'Регулярные')
@@ -303,7 +293,11 @@ const flow = async () => {
   await waitFor('ЗП частями')
   const partsRow = () => norm([...document.querySelectorAll('.list li')].find((li) => li.textContent.includes('ЗП частями')).innerText)
   if (!partsRow().includes('поступление завтра') || !partsRow().includes('+24 000,00 ₽ из 60 000,00 ₽ в мес.')) throw new Error('первая выплата:\n' + partsRow())
+  // Отметка первой выплаты переводит запись на вторую, с её суммой.
   click('.chip', 'Получено')
+  await waitFor('Получено: ЗП частями')
+  fill('Сколько пришло', '24000')
+  document.querySelector('.modal button[type="submit"]').click()
   await sleep(300)
   if (!partsRow().includes('поступление через 10 дн.') || !partsRow().includes('+36 000,00 ₽ из 60 000,00 ₽ в мес.')) throw new Error('вторая выплата:\n' + partsRow())
   if (!norm(text()).includes('150 000,00')) throw new Error('регулярные доходы в месяц должны быть 90 000 + 60 000:\n' + norm(text()))
@@ -442,64 +436,87 @@ const flow = async () => {
   await waitFor('Динамика за 6 месяцев')
   if (!norm(text()).includes('Осталось 1 759,50 ₽')) throw new Error('остаток лимита:\n' + norm(text()))
   snap('кредитка погашена')
+
+  // Автокопия: возврат к утреннему состоянию и обратно.
+  click('nav button', 'Ещё')
+  await waitFor('Автокопии на этом устройстве')
+  await waitFor('операций: 0')
+  click('.snapshots button', 'Вернуть')
+  await waitFor('Заменить данные?')
+  click('.snapshots button', 'Заменить данные?')
+  await waitFor('Данные возвращены к копии')
+  click('nav button', 'Счета')
+  await waitFor('Карта')
+  if (text().includes('Автокредит') || !norm(text()).includes('1 000,00 ₽')) throw new Error('восстановление не вернуло старое состояние:\n' + norm(text()))
+  click('nav button', 'Ещё')
+  await waitFor('перед восстановлением')
+  click('.snapshots button', 'Вернуть')
+  await waitFor('Заменить данные?')
+  click('.snapshots button', 'Заменить данные?')
+  await sleep(500)
+  click('nav button', 'Счета')
+  await waitFor('Автокредит')
+  if (!norm(text()).includes('-767 000,00 ₽')) throw new Error('отмена восстановления не вернула данные:\n' + norm(text()))
+
   window.__t = { click, waitFor, sleep }
 
   return steps.join('\n\n')
 }
 
-const res = await send('script.evaluate', {
-  expression: `(${flow.toString()})()`,
-  target: { context },
-  awaitPromise: true,
-})
-if (res.type === 'exception') {
-  console.log('ОШИБКА:', res.exceptionDetails.text)
-  process.exitCode = 1
-} else if (process.env.E2E_VERBOSE) {
-  console.log(res.result.value)
+let failed = false
+try {
+  const log = await browser.evaluate(`(${flow.toString()})()`)
+  // Подробный текст экранов нужен только при разборе ошибок.
+  if (process.env.E2E_VERBOSE) console.log(log)
+} catch (error) {
+  console.log('ОШИБКА:', error.message)
+  failed = true
 }
 
+// Вторая часть: проверки, которым нужен размер окна, и скриншоты экранов.
 const S = process.argv[2]
-const { writeFileSync } = await import('node:fs')
 const shot = async (name, js) => {
-  const r = await send('script.evaluate', { expression: `(async () => { const { click, waitFor, sleep } = window.__t; ${js}; await sleep(400) })()`, target: { context }, awaitPromise: true })
-  if (r.type === 'exception') throw new Error(r.exceptionDetails.text)
-  if (!S) return
-  const { data } = await send('browsingContext.captureScreenshot', { context })
-  writeFileSync(`${S}/${name}.png`, Buffer.from(data, 'base64'))
+  await browser.evaluate(`(async () => { const { click, waitFor, sleep } = window.__t; ${js}; await sleep(400) })()`)
+  if (S) writeFileSync(`${S}/${name}.png`, await browser.screenshot())
 }
-if (!process.exitCode) {
-  await send('browsingContext.setViewport', { context, viewport: { width: 400, height: 820 } })
-  await shot('1-ops', `click('nav button', 'Операции')`)
-  await shot('2-form', `click('button', 'Добавить операцию'); await waitFor('Новая операция')`)
-  await shot('2b-select', `[...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Счёт')).querySelector('button.select').click()`)
-  await shot('2c-select-category', `document.querySelector('.sheet [aria-label="Закрыть список"]').click(); await sleep(100); [...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Категория')).querySelector('button.select').click()`)
-  await shot('2d-closed', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await sleep(100); if (document.querySelector('.sheet')) throw new Error('Escape не закрыл список'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под списком')`)
-  await shot('2e-calendar', `document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты'); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100); if (document.querySelector('.calendar')) throw new Error('Escape не закрыл календарь'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под календарём'); document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты')`)
-  await shot('2f-picked', `
-    document.querySelector('.calendar [aria-label="Предыдущий месяц"]').click(); await sleep(80)
-    const head = document.querySelector('.calendar-nav span').textContent
-    if (!/^[А-Я][а-я]+ \\d{4}/.test(head)) throw new Error('заголовок календаря: ' + head)
-    if (document.querySelector('.calendar .weekday').textContent !== 'Пн') throw new Error('неделя не с понедельника')
-    ;[...document.querySelectorAll('.calendar .day')].find((d) => d.textContent === '15').click(); await sleep(100)
-    if (document.querySelector('.calendar')) throw new Error('календарь не закрылся после выбора')
-    const v = document.querySelector('.date-input input').value
-    if (!/^15\\.\\d\\d\\.\\d\\d$/.test(v)) throw new Error('дата после выбора: ' + v)
-  `)
-  await shot('3-accounts', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(150); if (document.querySelector('.modal')) throw new Error('Escape не закрыл форму'); click('nav button', 'Счета')`)
-  await shot('4-report', `click('nav button', 'Отчёт')`)
-  await send('browsingContext.setViewport', { context, viewport: { width: 1500, height: 820 } })
-  await shot('7-wide-account', `click('nav button', 'Счета'); await sleep(200); [...document.querySelectorAll('.row')].find((r) => r.textContent.includes('Автокредит')).click(); await waitFor('Тип счёта'); await sleep(300); const m = document.querySelector('.modal'); if (m.scrollHeight > m.clientHeight + 1) throw new Error('форма счёта не помещается без прокрутки: ' + m.scrollHeight + ' > ' + m.clientHeight)`)
-  await shot('8-wide-payment', `click('button', 'Закрыть'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:'); await sleep(300)`)
-  await shot('w1-accounts', `click('button', 'Закрыть'); await sleep(200)`)
-  await shot('w2-ops', `click('nav button', 'Операции')`)
-  await shot('w3-report', `click('nav button', 'Отчёт')`)
-  await shot('w4-subs', `click('nav button', 'Регулярные')`)
-  await shot('w5-more', `click('nav button', 'Ещё'); await sleep(100); if (document.documentElement.scrollWidth > window.innerWidth) throw new Error('горизонтальная прокрутка на широком экране')`)
-  await shot('w6-accounts-again', `click('nav button', 'Счета'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:')`)
-  await send('browsingContext.setViewport', { context, viewport: { width: 400, height: 820 } })
-  await shot('9-accounts-chip', `click('button', 'Закрыть'); await sleep(200); window.scrollTo(0, document.body.scrollHeight)`)
-  await shot('5-subs', `click('nav button', 'Регулярные')`)
-  await shot('6-more', `click('nav button', 'Ещё')`)
+if (!failed) {
+  try {
+    await browser.setViewport(400, 820)
+    await shot('1-ops', `click('nav button', 'Операции')`)
+    await shot('2-form', `click('button', 'Добавить операцию'); await waitFor('Новая операция')`)
+    await shot('2b-select', `[...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Счёт')).querySelector('button.select').click()`)
+    await shot('2c-select-category', `document.querySelector('.sheet [aria-label="Закрыть список"]').click(); await sleep(100); [...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Категория')).querySelector('button.select').click()`)
+    await shot('2d-closed', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await sleep(100); if (document.querySelector('.sheet')) throw new Error('Escape не закрыл список'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под списком')`)
+    await shot('2e-calendar', `document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты'); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100); if (document.querySelector('.calendar')) throw new Error('Escape не закрыл календарь'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под календарём'); document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты')`)
+    await shot('2f-picked', `
+      document.querySelector('.calendar [aria-label="Предыдущий месяц"]').click(); await sleep(80)
+      const head = document.querySelector('.calendar-nav span').textContent
+      if (!/^[А-Я][а-я]+ \\d{4}/.test(head)) throw new Error('заголовок календаря: ' + head)
+      if (document.querySelector('.calendar .weekday').textContent !== 'Пн') throw new Error('неделя не с понедельника')
+      ;[...document.querySelectorAll('.calendar .day')].find((d) => d.textContent === '15').click(); await sleep(100)
+      if (document.querySelector('.calendar')) throw new Error('календарь не закрылся после выбора')
+      const v = document.querySelector('.date-input input').value
+      if (!/^15\\.\\d\\d\\.\\d\\d$/.test(v)) throw new Error('дата после выбора: ' + v)
+    `)
+    await shot('3-accounts', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(150); if (document.querySelector('.modal')) throw new Error('Escape не закрыл форму'); click('nav button', 'Счета')`)
+    await shot('4-report', `click('nav button', 'Отчёт')`)
+    await browser.setViewport(1500, 820)
+    await shot('7-wide-account', `click('nav button', 'Счета'); await sleep(200); [...document.querySelectorAll('.row')].find((r) => r.textContent.includes('Автокредит')).click(); await waitFor('Тип счёта'); await sleep(300); const m = document.querySelector('.modal'); if (m.scrollHeight > m.clientHeight + 1) throw new Error('форма счёта не помещается без прокрутки: ' + m.scrollHeight + ' > ' + m.clientHeight)`)
+    await shot('8-wide-payment', `click('button', 'Закрыть'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:'); await sleep(300)`)
+    await shot('w1-accounts', `click('button', 'Закрыть'); await sleep(200)`)
+    await shot('w2-ops', `click('nav button', 'Операции')`)
+    await shot('w3-report', `click('nav button', 'Отчёт')`)
+    await shot('w4-subs', `click('nav button', 'Регулярные')`)
+    await shot('w5-more', `click('nav button', 'Ещё'); await sleep(100); if (document.documentElement.scrollWidth > window.innerWidth) throw new Error('горизонтальная прокрутка на широком экране')`)
+    await shot('w6-accounts-again', `click('nav button', 'Счета'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:')`)
+    await browser.setViewport(400, 820)
+    await shot('9-accounts-chip', `click('button', 'Закрыть'); await sleep(200); window.scrollTo(0, document.body.scrollHeight)`)
+    await shot('5-subs', `click('nav button', 'Регулярные')`)
+    await shot('6-more', `click('nav button', 'Ещё')`)
+  } catch (error) {
+    console.log('ОШИБКА:', error.message)
+    failed = true
+  }
 }
-ws.close()
+browser.close()
+process.exit(failed ? 1 : 0)

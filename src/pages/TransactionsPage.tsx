@@ -3,6 +3,7 @@ import { accountLabel } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { DateInput } from '../components/DateInput'
 import { PlusIcon, TransferIcon } from '../components/Icons'
+import { ConfirmButton } from '../components/ConfirmButton'
 import { Modal } from '../components/Modal'
 import { Select } from '../components/Select'
 import { MonthNav } from '../components/MonthNav'
@@ -227,7 +228,7 @@ function TxForm({
   }
 
   async function remove() {
-    if (!tx || !confirm('Удалить операцию?')) return
+    if (!tx) return
     await db.transactions.update(tx.id, deleted())
     onClose()
   }
@@ -293,9 +294,7 @@ function TxForm({
 
         <div className="actions">
           {tx && (
-            <button type="button" className="danger" onClick={remove}>
-              Удалить
-            </button>
+            <ConfirmButton label="Удалить" onConfirm={remove} />
           )}
           <button type="submit" className="primary">
             Сохранить

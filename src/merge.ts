@@ -9,14 +9,28 @@ import {
   type Transaction,
 } from './db'
 
-export interface Backup {
-  app: 'finanse'
-  version: 1
-  exportedAt: number
+/** Все записи приложения по таблицам: так они лежат и в файле копии, и в ответе сервера синхронизации. */
+export interface Records {
   accounts: Account[]
   categories: Category[]
   transactions: Transaction[]
   subscriptions: Subscription[]
+}
+
+export interface Backup extends Records {
+  app: 'finanse'
+  version: 1
+  exportedAt: number
+}
+
+/** Дополняет записи из старой копии или с устройства со старой версией полями, которых тогда не было. */
+export function normalizeRecords(records: Records): Records {
+  return {
+    accounts: records.accounts.map(normalizeAccount),
+    categories: records.categories.map(normalizeCategory),
+    transactions: records.transactions,
+    subscriptions: records.subscriptions.map(normalizeSubscription),
+  }
 }
 
 /** Записи из incoming, которых нет локально или которые изменены позже локальных. */
@@ -60,11 +74,5 @@ export function parseBackup(text: string): Backup {
   if (!isRecordList(subscriptions)) {
     throw new Error('Файл повреждён')
   }
-  // Копии старых версий дополняем полями, которых тогда не было.
-  return {
-    ...(b as Backup),
-    accounts: b.accounts.map(normalizeAccount),
-    categories: (b.categories as Category[]).map(normalizeCategory),
-    subscriptions: (subscriptions as Subscription[]).map(normalizeSubscription),
-  }
+  return { ...(b as Backup), ...normalizeRecords({ ...(b as Backup), subscriptions: subscriptions as Subscription[] }) }
 }

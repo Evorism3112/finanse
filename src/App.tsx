@@ -12,7 +12,9 @@ import { ReportPage } from './pages/ReportPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { accountReminders } from './payments'
+import { saveDailySnapshot } from './snapshots'
 import { accountBalances } from './stats'
+import { scheduleSync } from './sync'
 import { dueText, isDue, reminderText } from './subscriptions'
 
 const TABS = [
@@ -65,6 +67,27 @@ export default function App() {
       document.removeEventListener('visibilitychange', refresh)
     }
   }, [])
+
+  // Раз в день сохраняем копию данных внутри браузера — на случай ошибочной правки.
+  // Синхронизация с сервером, если она подключена: после правок, раз в минуту и при возвращении в приложение.
+  useEffect(() => {
+    scheduleSync()
+  }, [accounts, categories, transactions, subscriptions])
+  useEffect(() => {
+    const now = () => scheduleSync(0)
+    const timer = setInterval(now, 60_000)
+    document.addEventListener('visibilitychange', now)
+    now()
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', now)
+    }
+  }, [])
+
+  const hasAccounts = data.accounts.length > 0
+  useEffect(() => {
+    if (hasAccounts) void saveDailySnapshot(day)
+  }, [hasAccounts, day])
 
   const due = useMemo(() => data.subscriptions.filter((s) => isDue(s, day)), [data.subscriptions, day])
 
