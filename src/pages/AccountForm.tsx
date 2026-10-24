@@ -65,6 +65,7 @@ export function AccountForm({
   const [payment, setPayment] = useState(account?.paymentAmount != null ? amountToInput(account.paymentAmount) : '')
   const [nextPayment, setNextPayment] = useState(account?.nextPaymentDate ?? '')
   const [remindDays, setRemindDays] = useState(account?.paymentRemindDays ?? 3)
+  const [favorite, setFavorite] = useState(account?.favorite ?? false)
   const [error, setError] = useState('')
 
   const hasRate = kind === 'savings' || kind === 'loan'
@@ -129,9 +130,17 @@ export function AccountForm({
       paymentAmount,
       nextPaymentDate: isDebt && nextPayment ? nextPayment : null,
       paymentRemindDays: remindDays,
+      favorite,
     }
-    if (account) await db.accounts.update(account.id, { ...fields, ...touched() })
-    else await db.accounts.add(newRecord<Account>(fields))
+    await db.transaction('rw', db.accounts, async () => {
+      // Основной счёт один: звёздочка переходит к этому счёту.
+      if (favorite) {
+        const others = await db.accounts.filter((a) => a.favorite && a.deletedAt === null && a.id !== account?.id).toArray()
+        for (const other of others) await db.accounts.update(other.id, { favorite: false, ...touched() })
+      }
+      if (account) await db.accounts.update(account.id, { ...fields, ...touched() })
+      else await db.accounts.add(newRecord<Account>(fields))
+    })
     onClose()
   }
 
@@ -250,6 +259,11 @@ export function AccountForm({
             )}
           </>
         )}
+
+        <label className="check">
+          <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} />
+          Основной счёт: выбирается первым в новых операциях
+        </label>
 
         {HINTS[kind] && <p className="hint">{HINTS[kind]}</p>}
 

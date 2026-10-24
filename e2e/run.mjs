@@ -110,6 +110,9 @@ try {
   const flowCode = await runScenario('flow.mjs', shotsDir ? [shotsDir] : [])
   console.log(flowCode === 0 ? 'Основной сценарий пройден.' : 'Основной сценарий НЕ пройден.')
 
+  console.log('— Импорт выписок')
+  const importCode = await runScenario('import.mjs', shotsDir ? [shotsDir] : [])
+
   console.log('— Обновление старой базы')
   const migrateCode = await runScenario('migrate.mjs')
 
@@ -126,7 +129,7 @@ try {
     rmSync(syncData, { recursive: true, force: true })
   }
 
-  failed = flowCode !== 0 || migrateCode !== 0 || syncCode !== 0
+  failed = flowCode !== 0 || importCode !== 0 || migrateCode !== 0 || syncCode !== 0
 } catch (error) {
   console.error(error.message)
   failed = true

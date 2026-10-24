@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { accountLabel, isDebtKind } from '../accountKinds'
+import { accountLabel, defaultAccount, isDebtKind } from '../accountKinds'
 import { DateInput } from '../components/DateInput'
 import { Modal } from '../components/Modal'
 import { Select } from '../components/Select'
@@ -33,7 +33,7 @@ export function PaymentForm({
   const debt = Math.max(0, 0 - balance)
   const money = (minor: number) => formatAmount(minor, account.currency)
 
-  const [sourceId, setSourceId] = useState(sources[0]?.id ?? '')
+  const [sourceId, setSourceId] = useState(defaultAccount(sources)?.id ?? '')
   const [amount, setAmount] = useState(amountToInput(account.paymentAmount ?? debt))
   const [interest, setInterest] = useState('')
   const [date, setDate] = useState(today)

@@ -37,6 +37,8 @@ export interface Account extends Synced {
   nextPaymentDate: string | null
   /** За сколько дней до взноса начинать напоминать. */
   paymentRemindDays: number
+  /** Основной счёт: подставляется в новые операции и стоит первым в списках. */
+  favorite: boolean
 }
 
 /** Дополняет счёт из старой базы или старой копии полями, которых тогда не было. */
@@ -54,6 +56,7 @@ export function normalizeAccount(a: Account): Account {
     paymentAmount: a.paymentAmount ?? null,
     nextPaymentDate: a.nextPaymentDate ?? null,
     paymentRemindDays: a.paymentRemindDays ?? 3,
+    favorite: a.favorite ?? false,
   }
 }
 
@@ -238,6 +241,16 @@ db.version(6).upgrade(async (tx) => {
     .toCollection()
     .modify((s: Subscription) => {
       Object.assign(s, normalizeSubscription(s))
+    })
+})
+
+// Версия 7: основной счёт.
+db.version(7).upgrade(async (tx) => {
+  await tx
+    .table('accounts')
+    .toCollection()
+    .modify((a: Account) => {
+      Object.assign(a, normalizeAccount(a))
     })
 })
 

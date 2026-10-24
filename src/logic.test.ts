@@ -54,6 +54,7 @@ const account = (id: string, currency: string, initialBalance = 0): Account => (
   paymentAmount: null,
   nextPaymentDate: null,
   paymentRemindDays: 3,
+  favorite: false,
 })
 
 const tx = (fields: Partial<Transaction> & Pick<Transaction, 'type' | 'amount'>): Transaction => ({
@@ -235,6 +236,7 @@ describe('слияние копий', () => {
       paymentAmount: null,
       nextPaymentDate: null,
       paymentRemindDays: 3,
+      favorite: false,
     }
     expect(normalizeAccount(old)).toEqual(expected)
     const backup = { app: 'finanse', version: 1, exportedAt: 0, accounts: [old], categories: [], transactions: [] }

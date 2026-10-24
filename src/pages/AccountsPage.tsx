@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { ACCOUNT_KINDS, isDebtKind } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
-import { PlusIcon } from '../components/Icons'
+import { PlusIcon, StarIcon } from '../components/Icons'
 import { formatDate } from '../dates'
 import { type Account, type Data } from '../db'
 import { formatAmount, formatRate } from '../money'
@@ -124,7 +124,14 @@ export function AccountsPage({ accounts, categories, transactions, day }: Data &
                           {icon}
                         </Avatar>
                         <span className="row-main">
-                          <span>{a.name}</span>
+                          <span className="name">
+                            {a.name}
+                            {a.favorite && (
+                              <span className="star" title="Основной счёт">
+                                <StarIcon />
+                              </span>
+                            )}
+                          </span>
                           <span className="muted wrap">{sub}</span>
                           {graceToPay(a, balance) > 0 && (
                             <span className={`muted wrap${isGraceDue(a, balance, day) ? (daysUntil(a.graceDate!, day) < 0 ? ' overdue' : ' soon') : ''}`}>

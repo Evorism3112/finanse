@@ -115,3 +115,15 @@ export const CheckIcon = () => (
     <path d="M5 12.5l4.5 4.5L19 7" />
   </Icon>
 )
+
+export const StarIcon = () => (
+  <Icon>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+  </Icon>
+)
+
+export const UploadIcon = () => (
+  <Icon>
+    <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v5h14v-5" />
+  </Icon>
+)

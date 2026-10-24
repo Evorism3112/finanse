@@ -10,7 +10,12 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       // Открывает приложение по нажатию на уведомление.
-      workbox: { importScripts: ['sw-notify.js'] },
+      workbox: {
+        importScripts: ['sw-notify.js'],
+        // Обработчик PDF для импорта выписок — модуль .mjs больше 2 МБ по умолчанию не кэшируется; он нужен и без сети.
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png}'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
       manifest: {
         name: 'Финансы',
         short_name: 'Финансы',

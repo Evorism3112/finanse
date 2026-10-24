@@ -29,3 +29,31 @@ export function accountLabel(account: Pick<Account, 'kind' | 'name'>): string {
   if (!info || info.stem.test(account.name)) return account.name
   return `${info.short} ${account.name}`
 }
+
+const byName = (a: Account, b: Account) => a.name.localeCompare(b.name, 'ru')
+
+/**
+ * Основной счёт. Если его отметили на двух устройствах до синхронизации, звёздочка окажется у обоих —
+ * тогда главный тот, что отметили позже.
+ */
+export function favoriteAccount(accounts: Account[]): Account | undefined {
+  return accounts.filter((a) => a.favorite).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+/** Счета в порядке выбора: основной первым, остальные по алфавиту. */
+export function pickingOrder(accounts: Account[]): Account[] {
+  const favorite = favoriteAccount(accounts)
+  const rest = accounts.filter((a) => a !== favorite).sort(byName)
+  return favorite ? [favorite, ...rest] : rest
+}
+
+/**
+ * Счёт для новой операции: основной, а без него — первый по алфавиту из тех, которыми платят
+ * (обычные счета и кредитные карты), чтобы по умолчанию не подставлялся кредит или вклад.
+ */
+export function defaultAccount(accounts: Account[]): Account | undefined {
+  const favorite = favoriteAccount(accounts)
+  if (favorite) return favorite
+  const spending = accounts.filter((a) => a.kind === 'regular' || a.kind === 'credit_card')
+  return [...(spending.length > 0 ? spending : accounts)].sort(byName)[0]
+}

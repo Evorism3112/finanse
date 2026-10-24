@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { accountLabel } from '../accountKinds'
+import { accountLabel, defaultAccount } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { DateInput } from '../components/DateInput'
 import { PlusIcon, TransferIcon } from '../components/Icons'
@@ -182,7 +182,7 @@ function TxForm({
 }) {
   const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
   const [amount, setAmount] = useState(tx ? amountToInput(tx.amount) : '')
-  const [accountId, setAccountId] = useState(tx?.accountId ?? accounts[0].id)
+  const [accountId, setAccountId] = useState(tx?.accountId ?? defaultAccount(accounts)!.id)
   const [toAccountId, setToAccountId] = useState(tx?.toAccountId ?? '')
   const [toAmount, setToAmount] = useState(tx?.toAmount != null ? amountToInput(tx.toAmount) : '')
   const [categoryId, setCategoryId] = useState(tx?.categoryId ?? '')

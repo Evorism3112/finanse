@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent } from 'react'
+import { defaultAccount } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { DateInput } from '../components/DateInput'
 import { BellIcon, PlusIcon } from '../components/Icons'
@@ -211,7 +212,7 @@ function SubscriptionForm({
   const [period, setPeriod] = useState<Period>(sub?.period ?? 'month')
   const [nextDate, setNextDate] = useState(sub?.nextDate ?? addPeriod(today(), 'month'))
   const [autoRenew, setAutoRenew] = useState(sub?.autoRenew ?? true)
-  const [accountId, setAccountId] = useState(sub ? (sub.accountId ?? '') : (accounts[0]?.id ?? ''))
+  const [accountId, setAccountId] = useState(sub ? (sub.accountId ?? '') : (defaultAccount(accounts)?.id ?? ''))
   const [currency, setCurrency] = useState(sub?.currency ?? 'RUB')
   const [categoryId, setCategoryId] = useState(sub ? (sub.categoryId ?? '') : 'default-subscriptions')
   const [remindDays, setRemindDays] = useState(sub?.remindDays ?? 3)
