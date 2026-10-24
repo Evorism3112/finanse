@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { ACCOUNT_KINDS } from '../accountKinds'
+import { queueQuestion } from '../assistant'
 import { colorOf } from '../colors'
 import { Avatar } from '../components/Avatar'
-import { ArrowInIcon, ArrowOutIcon, CardIcon, ShieldIcon } from '../components/Icons'
+import { ArrowInIcon, ArrowOutIcon, CardIcon, ShieldIcon, SparkIcon } from '../components/Icons'
 import { TxRow } from '../components/TxRow'
-import { currentMonth, monthLabel } from '../dates'
+import { currentMonth, formatDate, monthLabel } from '../dates'
 import type { Account, Data, Subscription, Transaction } from '../db'
+import { dailyBudget, monthForecast, tips } from '../insights'
 import { formatAmount } from '../money'
 import type { AccountReminder } from '../payments'
 import { accountBalances, mainCurrency, monthReport, netWorthByCurrency } from '../stats'
@@ -18,12 +20,13 @@ const RECENT = 5
 /** В полосе по категориям — пять крупнейших, остальное одним отрезком. */
 const BAR_SLICES = 5
 
-export type HomeTarget = 'transactions' | 'accounts' | 'subscriptions' | 'report' | 'more'
+export type HomeTarget = 'transactions' | 'accounts' | 'subscriptions' | 'report' | 'more' | 'assistant'
 
 export function HomePage({
   accounts,
   categories,
   transactions,
+  subscriptions,
   day,
   due,
   debtReminders,
@@ -52,6 +55,12 @@ export function HomePage({
 
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  const budget = useMemo(() => dailyBudget(accounts, balances, subscriptions, day), [accounts, balances, subscriptions, day])
+  const forecast = useMemo(() => monthForecast(accounts, transactions, day), [accounts, transactions, day])
+  const advice = useMemo(
+    () => tips(accounts, categories, transactions, subscriptions, balances, day),
+    [accounts, categories, transactions, subscriptions, balances, day],
+  )
   const recent = useMemo(
     () => [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt).slice(0, RECENT),
     [transactions],
@@ -73,6 +82,10 @@ export function HomePage({
   }
 
   const money = (minor: number) => formatAmount(minor, currency)
+  const ask = (question: string) => {
+    queueQuestion(question)
+    onGo('assistant')
+  }
   const expenses = report?.expenseByCategory ?? []
   const shown = expenses.slice(0, BAR_SLICES)
   const rest = (report?.expense ?? 0) - shown.reduce((sum, c) => sum + c.amount, 0)
@@ -97,6 +110,20 @@ export function HomePage({
             </div>
           </div>
         )}
+      </section>
+
+      <section className="card budget-card">
+        <div className="budget-main">
+          <span className="muted">Можно тратить в день</span>
+          <strong className={budget.free < 0 ? 'amount expense' : 'amount'}>{money(budget.perDay)}</strong>
+          <span className="muted wrap">
+            {budget.payday ? `до дохода ${formatDate(budget.until)}` : 'до конца месяца'} · {budget.days} дн. ·{' '}
+            {budget.free < 0 ? `не хватает ${money(-budget.free)}` : `свободно ${money(budget.free)}`}
+          </span>
+        </div>
+        <button type="button" className="chip" onClick={() => ask('сколько можно тратить в день')}>
+          Как считается
+        </button>
       </section>
 
       <div className="home-columns">
@@ -128,6 +155,12 @@ export function HomePage({
                 </span>
               </div>
             </div>
+            {forecast && (
+              <p className="forecast">
+                Прогноз на месяц: ≈ {money(forecast.forecast)}
+                {forecast.usual ? <span className="muted"> · обычно {money(forecast.usual)}</span> : null}
+              </p>
+            )}
             {shown.length > 0 && (
               <>
                 <div className="stack-bar" aria-hidden="true">
@@ -212,6 +245,25 @@ export function HomePage({
         </div>
 
         <section className="home-column">
+          {advice.length > 0 && (
+            <section className="card tips">
+              <div className="card-head">
+                <h2>Советы</h2>
+                <button type="button" className="link" onClick={() => onGo('assistant')}>
+                  Помощник
+                </button>
+              </div>
+              <ul>
+                {advice.map((tip) => (
+                  <li key={tip.text} className={tip.level}>
+                    <SparkIcon />
+                    <span>{tip.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <div className="section-head">
             <h2>Последние операции</h2>
             <button type="button" className="link" onClick={() => onGo('transactions')}>

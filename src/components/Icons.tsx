@@ -259,3 +259,15 @@ export const ShieldIcon = () => (
     <path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zM9 12l2 2 4-4" />
   </Icon>
 )
+
+export const SparkIcon = () => (
+  <Icon>
+    <path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9zM18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+  </Icon>
+)
+
+export const SendIcon = () => (
+  <Icon>
+    <path d="M5 12h13M12 5l7 7-7 7" />
+  </Icon>
+)

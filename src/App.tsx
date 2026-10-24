@@ -2,12 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { ACCOUNT_KIND_ORDER } from './accountKinds'
 import { lastBackupAt } from './backup'
-import { BellIcon, ChartIcon, ChevronLeftIcon, HomeIcon, ListIcon, PlusIcon, RepeatIcon, SettingsIcon, WalletIcon } from './components/Icons'
+import { BellIcon, ChartIcon, ChevronLeftIcon, HomeIcon, ListIcon, PlusIcon, RepeatIcon, SettingsIcon, SparkIcon, WalletIcon } from './components/Icons'
 import { today } from './dates'
 import { db, type Data, type Synced, type Transaction } from './db'
 import { setBackHandler } from './native'
 import { notifyDue, scheduleUpcoming } from './notify'
 import { AccountsPage } from './pages/AccountsPage'
+import { AssistantPage } from './pages/AssistantPage'
 import { HomePage } from './pages/HomePage'
 import { MorePage } from './pages/MorePage'
 import { ReportPage } from './pages/ReportPage'
@@ -30,13 +31,14 @@ const TABS = [
   ['transactions', 'Операции', ListIcon],
   ['report', 'Аналитика', ChartIcon],
   ['accounts', 'Счета', WalletIcon],
+  ['assistant', 'Помощник', SparkIcon],
   ['subscriptions', 'Регулярные', RepeatIcon],
   ['more', 'Ещё', SettingsIcon],
 ] as const
 
 type Tab = (typeof TABS)[number][0]
 
-const EXTRA_TABS: Tab[] = ['subscriptions', 'more']
+const EXTRA_TABS: Tab[] = ['assistant', 'subscriptions', 'more']
 
 const weekdayDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -181,6 +183,9 @@ export default function App() {
         <div className="header-actions" ref={setHeaderSlot}>
           {tab === 'home' && (
             <>
+              <button type="button" className="icon-btn boxed" aria-label="Помощник" onClick={() => setTab('assistant')}>
+                <SparkIcon />
+              </button>
               <button type="button" className="icon-btn boxed" aria-label={`Регулярные платежи${due.length ? `: ${due.length}` : ''}`} onClick={() => setTab('subscriptions')}>
                 <BellIcon />
                 {due.length > 0 && <span className="badge">{due.length}</span>}
@@ -211,6 +216,8 @@ export default function App() {
           <AccountsPage {...data} day={day} headerSlot={headerSlot} />
         ) : tab === 'subscriptions' ? (
           <SubscriptionsPage {...data} day={day} headerSlot={headerSlot} />
+        ) : tab === 'assistant' ? (
+          <AssistantPage {...data} day={day} />
         ) : tab === 'report' ? (
           <ReportPage {...data} />
         ) : (

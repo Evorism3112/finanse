@@ -2340,3 +2340,262 @@ button:disabled {
     max-height: 252px;
   }
 }
+
+/* Главная: сколько можно тратить, прогноз и советы */
+
+.budget-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.budget-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.budget-main .muted:first-child {
+  font-weight: 700;
+}
+
+.budget-main strong {
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.card .forecast {
+  margin: 14px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.tips ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.tips li {
+  display: flex;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.tips li svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.tips li.warn svg {
+  color: var(--warning);
+}
+
+/* Помощник */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  margin: 0;
+  max-width: 100%;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.bubble.me {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 18px 18px 4px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.bubble.bot {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.bot-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.bot-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bot-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 4px 18px 18px 18px;
+  background: var(--surface);
+}
+
+.bot-body p {
+  margin: 0;
+}
+
+.chat-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-rows li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.chat-rows li + li {
+  border-top: 1px solid var(--border);
+}
+
+.chat-rows .row-main span {
+  white-space: normal;
+}
+
+.chat-section h3 {
+  margin: 4px 0 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-chips .pill {
+  height: auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 17px;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.draft-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.draft-head .row-main .wrap {
+  white-space: normal;
+}
+
+.draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.draft-status {
+  margin-right: auto;
+  color: var(--income);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.draft-status.muted {
+  color: var(--muted);
+}
+
+.chat-end {
+  /* Прокрутка к последнему сообщению оставляет место под поле ввода и нижнее меню. */
+  scroll-margin-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 96px);
+}
+
+.chat-input {
+  position: sticky;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 10px);
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 -12px 24px var(--bg);
+}
+
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+}
+
+.chat-input button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  padding: 0;
+}
+
+.chat-input button svg {
+  width: 22px;
+  height: 22px;
+}
+
+@media (min-width: 1000px) {
+  .chat {
+    max-width: 760px;
+  }
+
+  .chat-input {
+    bottom: 16px;
+  }
+}

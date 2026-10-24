@@ -7,7 +7,7 @@ import { Calendar } from '../components/DateInput'
 import { BackspaceIcon, CalendarIcon, CloseIcon, SwapIcon } from '../components/Icons'
 import { Select } from '../components/Select'
 import { addDays, formatDate, today } from '../dates'
-import { db, deleted, newRecord, touched, type Account, type Category, type Transaction, type TxType } from '../db'
+import { db, deleted, newRecord, touched, type Account, type Category, type Synced, type Transaction, type TxType } from '../db'
 import { amountToInput, currencySymbol, parseAmount, typeAmount } from '../money'
 import { accountOptions } from '../selectOptions'
 import { useEscape } from '../useEscape'
@@ -26,25 +26,32 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'back']
  */
 export function TxForm({
   tx,
+  draft,
   accounts,
   categories,
   transactions,
   onClose,
+  onSaved,
 }: {
   tx: Transaction | null
+  /** Заполненная заранее новая операция, например из помощника. */
+  draft?: Omit<Transaction, keyof Synced>
   accounts: Account[]
   categories: Category[]
   transactions: Transaction[]
   onClose: () => void
+  /** Новая операция записана; передаётся её id. */
+  onSaved?: (id: string) => void
 }) {
-  const [type, setType] = useState<TxType>(tx?.type ?? 'expense')
-  const [amount, setAmount] = useState(tx ? typeAmount(amountToInput(tx.amount)) : '')
-  const [accountId, setAccountId] = useState(tx?.accountId ?? defaultAccount(accounts)!.id)
-  const [toAccountId, setToAccountId] = useState(tx?.toAccountId ?? '')
-  const [toAmount, setToAmount] = useState(tx?.toAmount != null ? amountToInput(tx.toAmount) : '')
-  const [categoryId, setCategoryId] = useState(tx?.categoryId ?? '')
-  const [date, setDate] = useState(tx?.date ?? today())
-  const [note, setNote] = useState(tx?.note ?? '')
+  const init = tx ?? draft
+  const [type, setType] = useState<TxType>(init?.type ?? 'expense')
+  const [amount, setAmount] = useState(init ? typeAmount(amountToInput(init.amount)) : '')
+  const [accountId, setAccountId] = useState(init?.accountId ?? defaultAccount(accounts)!.id)
+  const [toAccountId, setToAccountId] = useState(init?.toAccountId ?? '')
+  const [toAmount, setToAmount] = useState(init?.toAmount != null ? amountToInput(init.toAmount) : '')
+  const [categoryId, setCategoryId] = useState(init?.categoryId ?? '')
+  const [date, setDate] = useState(init?.date ?? today())
+  const [note, setNote] = useState(init?.note ?? '')
   const [calendar, setCalendar] = useState(false)
   const [error, setError] = useState('')
   const [touch] = useState(() => matchMedia('(pointer: coarse)').matches)
@@ -109,7 +116,11 @@ export function TxForm({
       note: note.trim(),
     }
     if (tx) await db.transactions.update(tx.id, { ...fields, ...touched() })
-    else await db.transactions.add(newRecord<Transaction>(fields))
+    else {
+      const record = newRecord<Transaction>(fields)
+      await db.transactions.add(record)
+      onSaved?.(record.id)
+    }
     onClose()
   }
 

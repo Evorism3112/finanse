@@ -475,6 +475,41 @@ const flow = async () => {
   await waitFor('Автокредит')
   if (!norm(text()).includes('-767 000,00 ₽')) throw new Error('отмена восстановления не вернула данные:\n' + norm(text()))
 
+  // Помощник: список команд, операция фразой с отменой и ответ на вопрос.
+  click('nav button', 'Помощник')
+  await waitFor('Привет! Я помогаю с деньгами')
+  const say = async (message) => {
+    const input = document.querySelector('#assistant-input')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, message)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await sleep(50)
+    document.querySelector('.chat-input button[type="submit"]').click()
+    await sleep(150)
+  }
+  await say('что ты можешь')
+  await waitFor('Записать операцию')
+  await waitFor('когда закрою автокредит')
+  await say('вчера такси 650 с кредитки')
+  await waitFor('Записать так?')
+  const draft = () => [...document.querySelectorAll('.draft')].at(-1)
+  if (!draft().textContent.includes('Расход · Транспорт') || !draft().textContent.includes('Кредитка · вчера · Такси')) throw new Error('черновик операции:\n' + draft().innerText)
+  click('.draft button', 'Записать')
+  await waitFor('Записано')
+  click('nav button', 'Операции')
+  await waitFor('Кредитка · Такси')
+  click('nav button', 'Помощник')
+  await waitFor('Записано')
+  click('.draft button', 'Отменить')
+  await waitFor('Отменено')
+  click('nav button', 'Операции')
+  await sleep(200)
+  if (text().includes('Кредитка · Такси')) throw new Error('отмена в помощнике не удалила операцию')
+  click('nav button', 'Помощник')
+  await sleep(150)
+  await say('сколько потратил на продукты')
+  await waitFor('Расходы на «Продукты»')
+  snap('помощник')
+
   window.__t = { click, waitFor, sleep }
 
   return steps.join('\n\n')
