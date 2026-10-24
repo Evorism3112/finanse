@@ -1,11 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { defaultAccount } from '../accountKinds'
+import { parseOperation } from '../assistant'
 import { Avatar } from '../components/Avatar'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { Calendar } from '../components/DateInput'
 import { BackspaceIcon, CalendarIcon, CloseIcon, SwapIcon } from '../components/Icons'
 import { Select } from '../components/Select'
+import { VoiceButton } from '../components/VoiceButton'
 import { addDays, formatDate, today } from '../dates'
 import { db, deleted, newRecord, touched, type Account, type Category, type Synced, type Transaction, type TxType } from '../db'
 import { amountToInput, currencySymbol, parseAmount, typeAmount } from '../money'
@@ -80,6 +82,20 @@ export function TxForm({
     setError('')
     const raw = amount.replace(/ /g, '')
     setAmount(typeAmount(key === 'back' ? raw.slice(0, -1) : raw + key))
+  }
+
+  /** Заполняет форму по сказанной фразе: «такси 600 с кредитки», «зарплата 90000». */
+  function fillFromVoice(text: string) {
+    const parsed = parseOperation(text, { accounts, categories, transactions, subscriptions: [], today: today() })
+    if (!parsed) return setError(`Не расслышал сумму в «${text}». Скажите, например: «кофе 250».`)
+    setError('')
+    setType(parsed.type)
+    setAmount(typeAmount(amountToInput(parsed.amount)))
+    setAccountId(parsed.accountId)
+    setToAccountId(parsed.toAccountId ?? '')
+    setCategoryId(parsed.categoryId ?? '')
+    setDate(parsed.date)
+    setNote(parsed.note)
   }
 
   function swap() {
@@ -159,6 +175,7 @@ export function TxForm({
                   </button>
                 ))}
               </div>
+              <VoiceButton prompt="Скажите, например: такси 600 с кредитки" onText={fillFromVoice} onError={setError} />
             </div>
   
             <label className={`quick-amount ${type}`}>

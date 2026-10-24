@@ -2,7 +2,7 @@ import { accountLabel } from './accountKinds'
 import { addDays } from './dates'
 import type { Account, Subscription } from './db'
 import { formatAmount } from './money'
-import { graceDueText, graceToPay, paymentDueText } from './payments'
+import { graceDueText, graceToPay, nextStatementDate, paymentDueText } from './payments'
 import { reminderText } from './subscriptions'
 
 /** Напоминание на будущую дату: телефон покажет его сам, даже если приложение закрыто. */
@@ -51,6 +51,13 @@ export function upcomingReminders(
       add(`${account.id}:pay`, account.nextPaymentDate, account.paymentRemindDays, accountLabel(account), (day) =>
         capitalize(paymentDueText(account.nextPaymentDate!, day)) + amount,
       )
+    }
+    // В день выписки — напоминание узнать новый обязательный платёж, если срок следующего ещё не указан.
+    if (account.kind === 'credit_card' && account.statementDay != null && account.nextPaymentDate == null) {
+      const day = nextStatementDate(account.statementDay, addDays(today, 1))
+      if (day <= limit) {
+        out.push({ id: `${account.id}:statement@${day}`, date: day, title: accountLabel(account), body: 'Банк рассчитал обязательный платёж — посмотрите его в приложении банка и укажите' })
+      }
     }
     const grace = graceToPay(account, balance)
     if (grace > 0) {

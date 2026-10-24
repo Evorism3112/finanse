@@ -6,7 +6,7 @@ import { PlusIcon, StarIcon } from '../components/Icons'
 import { formatDate } from '../dates'
 import { type Account, type Data } from '../db'
 import { formatAmount, formatRate } from '../money'
-import { graceRowText, graceToPay, isGraceDue, isPaymentDue, paymentDueText } from '../payments'
+import { graceRowText, graceToPay, isGraceDue, isPaymentDue, paymentDueText, statementState, statementText } from '../payments'
 import { accountBalances, creditUsage, monthlyInterest, netWorthByCurrency } from '../stats'
 import { daysUntil } from '../subscriptions'
 import { AccountForm } from './AccountForm'
@@ -128,6 +128,7 @@ export function AccountsPage({
                 {items.map((a) => {
                   const balance = balances.get(a.id) ?? 0
                   const { sub, progress, usage } = describe(a, balance)
+                  const statement = statementState(a, balance, day)
                   return (
                     <li key={a.id}>
                       <button type="button" className="row" onClick={() => setEditing(a)}>
@@ -156,6 +157,9 @@ export function AccountsPage({
                               {paymentDueText(a.nextPaymentDate, day)} · {formatDate(a.nextPaymentDate)}
                               {a.paymentAmount ? ` · ${formatAmount(a.paymentAmount, a.currency)}` : ''}
                             </span>
+                          )}
+                          {statement && (
+                            <span className={`muted wrap${statement.kind === 'calculated' ? ' soon' : ''}`}>{statementText(statement, day)}</span>
                           )}
                           {progress !== null && (
                             <span className="bar">

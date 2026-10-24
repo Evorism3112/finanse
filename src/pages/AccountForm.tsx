@@ -65,6 +65,7 @@ export function AccountForm({
   const [payment, setPayment] = useState(account?.paymentAmount != null ? amountToInput(account.paymentAmount) : '')
   const [nextPayment, setNextPayment] = useState(account?.nextPaymentDate ?? '')
   const [remindDays, setRemindDays] = useState(account?.paymentRemindDays ?? 3)
+  const [statementDay, setStatementDay] = useState(account?.statementDay != null ? String(account.statementDay) : '')
   const [favorite, setFavorite] = useState(account?.favorite ?? false)
   const [error, setError] = useState('')
 
@@ -115,6 +116,12 @@ export function AccountForm({
       if (paymentAmount === null || paymentAmount <= 0) return setError('Размер платежа — это число больше нуля')
     }
 
+    let parsedStatementDay: number | null = null
+    if (kind === 'credit_card' && statementDay.trim() !== '') {
+      parsedStatementDay = /^\d{1,2}$/.test(statementDay.trim()) ? Number(statementDay) : 0
+      if (parsedStatementDay < 1 || parsedStatementDay > 31) return setError('День выписки — число месяца от 1 до 31')
+    }
+
     const fields = {
       name: trimmed,
       kind,
@@ -131,6 +138,7 @@ export function AccountForm({
       nextPaymentDate: isDebt && nextPayment ? nextPayment : null,
       paymentRemindDays: remindDays,
       favorite,
+      statementDay: parsedStatementDay,
     }
     await db.transaction('rw', db.accounts, async () => {
       // Основной счёт один: звёздочка переходит к этому счёту.
@@ -244,10 +252,17 @@ export function AccountForm({
           </label>
         )}
 
+        {kind === 'credit_card' && (
+          <label>
+            День выписки — когда банк рассчитывает обязательный платёж (число месяца, необязательно)
+            <input inputMode="numeric" value={statementDay} onChange={(e) => setStatementDay(e.target.value)} placeholder="Например, 5" />
+          </label>
+        )}
+
         {isDebt && (
           <>
             <label>
-              {kind === 'loan' ? 'Ежемесячный платёж' : 'Минимальный платёж'} (необязательно)
+              {kind === 'loan' ? 'Ежемесячный платёж' : 'Обязательный платёж'} (необязательно)
               <input inputMode="decimal" value={payment} onChange={(e) => setPayment(e.target.value)} placeholder="0,00" />
             </label>
             <label>

@@ -5,7 +5,7 @@ import { addDays, formatDate, isoDate, shiftMonth } from './dates'
 import type { Account, Category, Data, TxType } from './db'
 import { dailyBudget, expensesBetween, payoff, tips } from './insights'
 import { formatAmount, formatRate } from './money'
-import { graceToPay } from './payments'
+import { graceToPay, statementState } from './payments'
 import { accountBalances, mainCurrency } from './stats'
 import { daysUntil } from './subscriptions'
 
@@ -413,6 +413,10 @@ function upcoming(text: string, ctx: Ctx): Reply {
     if (balance >= 0) continue
     if (a.nextPaymentDate && a.nextPaymentDate <= until) {
       items.push({ date: a.nextPaymentDate, label: `${accountLabel(a)}: взнос`, value: a.paymentAmount ? `−${formatAmount(a.paymentAmount, a.currency)}` : '' })
+    }
+    const statement = statementState(a, balance, ctx.today)
+    if (statement?.kind === 'waiting' && statement.date <= until) {
+      items.push({ date: statement.date, label: `${accountLabel(a)}: банк рассчитает обязательный платёж`, value: '' })
     }
     const grace = graceToPay(a, balance)
     if (grace > 0 && a.graceDate! <= until) items.push({ date: a.graceDate!, label: `${accountLabel(a)}: конец льготного периода`, value: `−${formatAmount(grace, a.currency)}` })

@@ -12,6 +12,7 @@ import { formatAmount } from '../money'
 import type { AccountReminder } from '../payments'
 import { accountBalances, mainCurrency, monthReport, netWorthByCurrency } from '../stats'
 import { dueText } from '../subscriptions'
+import { AccountForm } from './AccountForm'
 import { PaymentForm } from './PaymentForm'
 import { PayForm } from './SubscriptionsPage'
 
@@ -44,6 +45,7 @@ export function HomePage({
 }) {
   const [paying, setPaying] = useState<Subscription | null>(null)
   const [payingDebt, setPayingDebt] = useState<Account | null>(null)
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
 
   const currency = mainCurrency(accounts)
   const month = currentMonth()
@@ -217,10 +219,17 @@ export function HomePage({
                         </span>
                         <span className="muted soon wrap">{r.text}</span>
                       </span>
-                      {account && (
-                        <button type="button" className="chip strong" onClick={() => setPayingDebt(account)}>
-                          Внести
+                      {/* После выписки нужно не платить, а сначала указать рассчитанный банком платёж. */}
+                      {account && r.id.endsWith(':statement') ? (
+                        <button type="button" className="chip strong" onClick={() => setEditingAccount(account)}>
+                          Указать
                         </button>
+                      ) : (
+                        account && (
+                          <button type="button" className="chip strong" onClick={() => setPayingDebt(account)}>
+                            Внести
+                          </button>
+                        )
                       )}
                     </li>
                   )
@@ -283,6 +292,17 @@ export function HomePage({
       </div>
 
       {paying && <PayForm sub={paying} accounts={accounts} categories={categories} onClose={() => setPaying(null)} />}
+      {editingAccount && (
+        <AccountForm
+          account={editingAccount}
+          hasTransactions={transactions.some((t) => t.accountId === editingAccount.id || t.toAccountId === editingAccount.id)}
+          onClose={() => setEditingAccount(null)}
+          onPay={(account) => {
+            setEditingAccount(null)
+            setPayingDebt(account)
+          }}
+        />
+      )}
       {payingDebt && (
         <PaymentForm
           account={payingDebt}

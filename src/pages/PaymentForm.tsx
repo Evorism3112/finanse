@@ -3,10 +3,10 @@ import { accountLabel, defaultAccount, isDebtKind } from '../accountKinds'
 import { DateInput } from '../components/DateInput'
 import { Modal } from '../components/Modal'
 import { Select } from '../components/Select'
-import { formatDate, today } from '../dates'
+import { addDays, formatDate, today } from '../dates'
 import { db, newRecord, touched, type Account, type Category, type Transaction } from '../db'
 import { amountToInput, formatAmount, parseAmount } from '../money'
-import { graceToPay } from '../payments'
+import { graceToPay, nextStatementDate } from '../payments'
 import { accountOptions } from '../selectOptions'
 import { addPeriod } from '../subscriptions'
 
@@ -37,7 +37,9 @@ export function PaymentForm({
   const [amount, setAmount] = useState(amountToInput(account.paymentAmount ?? debt))
   const [interest, setInterest] = useState('')
   const [date, setDate] = useState(today)
-  const [remind, setRemind] = useState(true)
+  // У карты с днём выписки следующий платёж станет известен только после выписки: приложение само напомнит его указать.
+  const waitsStatement = account.kind === 'credit_card' && account.statementDay != null
+  const [remind, setRemind] = useState(!waitsStatement)
   const [nextDate, setNextDate] = useState(() => addPeriod(account.nextPaymentDate ?? today(), 'month'))
   const [nextAmount, setNextAmount] = useState(account.paymentAmount != null ? amountToInput(account.paymentAmount) : '')
   const [newGrace, setNewGrace] = useState('')
@@ -173,6 +175,12 @@ export function PaymentForm({
               <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} />
               Напомнить о следующем платеже
             </label>
+            {!remind && waitsStatement && (
+              <p className="hint">
+                Следующий обязательный платёж банк рассчитает {formatDate(nextStatementDate(account.statementDay!, addDays(date || today(), 1)))} — приложение напомнит
+                его указать.
+              </p>
+            )}
             {remind && (
               <>
                 <label>

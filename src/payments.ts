@@ -1,5 +1,5 @@
 import { accountLabel } from './accountKinds'
-import { formatDate } from './dates'
+import { addDays, formatDate, shiftMonth } from './dates'
 import type { Account } from './db'
 import { formatAmount } from './money'
 import { daysUntil } from './subscriptions'
@@ -58,6 +58,52 @@ export function graceRowText(account: Account, balance: number, today: string): 
     : `без % до ${formatDate(account.graceDate!)} · ${when} · погасить ${amount}`
 }
 
+/** Сколько дней после выписки напоминать, что пора узнать в банке рассчитанный обязательный платёж. */
+const STATEMENT_REMIND_DAYS = 10
+
+/** Дата с этим числом в месяце month (ГГГГ-ММ); числа, которого в месяце нет, прижимаются к его концу. */
+function dayOfMonth(month: string, day: number): string {
+  const last = Number(addDays(`${shiftMonth(month, 1)}-01`, -1).slice(8))
+  return `${month}-${String(Math.min(day, last)).padStart(2, '0')}`
+}
+
+/** Ближайшая дата выписки не раньше today. */
+export function nextStatementDate(day: number, today: string): string {
+  const thisMonth = dayOfMonth(today.slice(0, 7), day)
+  return thisMonth >= today ? thisMonth : dayOfMonth(shiftMonth(today.slice(0, 7), 1), day)
+}
+
+/** Последняя дата выписки не позже today. */
+export function lastStatementDate(day: number, today: string): string {
+  const thisMonth = dayOfMonth(today.slice(0, 7), day)
+  return thisMonth <= today ? thisMonth : dayOfMonth(shiftMonth(today.slice(0, 7), -1), day)
+}
+
+/**
+ * Что известно об обязательном платеже кредитки, у которой задан день выписки, а срок платежа ещё не указан:
+ * waiting — банк рассчитает его в день выписки, calculated — выписка недавно была, пора узнать сумму в банке.
+ * null — есть указанный платёж, нет долга или день выписки не задан.
+ */
+export function statementState(
+  account: Account,
+  balance: number,
+  today: string,
+): { kind: 'waiting' | 'calculated'; date: string } | null {
+  if (account.kind !== 'credit_card' || account.statementDay == null || balance >= 0 || account.nextPaymentDate != null) return null
+  const last = lastStatementDate(account.statementDay, today)
+  if (daysUntil(today, last) <= STATEMENT_REMIND_DAYS) return { kind: 'calculated', date: last }
+  return { kind: 'waiting', date: nextStatementDate(account.statementDay, today) }
+}
+
+/** Строка о выписке: «обязательный платёж рассчитают 05.11» или «обязательный платёж рассчитан 05.11 — укажите его». */
+export function statementText(state: { kind: 'waiting' | 'calculated'; date: string }, today: string): string {
+  if (state.kind === 'calculated') {
+    return `обязательный платёж рассчитан ${state.date === today ? 'сегодня' : formatDate(state.date)} — посмотрите его в банке и укажите`
+  }
+  const days = daysUntil(state.date, today)
+  return `обязательный платёж рассчитают ${days === 1 ? 'завтра' : formatDate(state.date)}`
+}
+
 export interface AccountReminder {
   /** Уникален для пары «счёт — вид напоминания»: по нему уведомление показывается не чаще раза в день. */
   id: string
@@ -78,6 +124,11 @@ export function paymentReminder(account: Account, today: string): AccountReminde
 export function accountReminders(account: Account, balance: number, today: string): AccountReminder[] {
   const reminders: AccountReminder[] = []
   if (isPaymentDue(account, balance, today)) reminders.push(paymentReminder(account, today))
+  const statement = statementState(account, balance, today)
+  if (statement?.kind === 'calculated') {
+    const text = statementText(statement, today)
+    reminders.push({ id: `${account.id}:statement`, title: accountLabel(account), text, body: capitalize(text) })
+  }
   if (isGraceDue(account, balance, today)) {
     const text = graceDueText(account.graceDate!, today)
     reminders.push({

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { answer, describeDraft, GREETING, clearQueuedQuestion, queuedQuestion, type Draft, type Reply } from '../assistant'
 import { SendIcon, SparkIcon } from '../components/Icons'
+import { VoiceButton } from '../components/VoiceButton'
 import { db, deleted, newRecord, type Data, type Transaction } from '../db'
 import { TxForm } from './TxForm'
 
@@ -143,6 +144,12 @@ export function AssistantPage({ day, ...data }: Data & { day: string }) {
           placeholder="кофе 250 или «сколько потратил на кафе»"
           autoComplete="off"
           enterKeyHint="send"
+        />
+        <VoiceButton
+          prompt="Скажите, например: кофе 250"
+          className="voice-btn"
+          onText={ask}
+          onError={(message) => setMessages((list) => [...list, { id: nextId++, from: 'bot', reply: { text: [message] } }])}
         />
         <button type="submit" className="primary" aria-label="Отправить" disabled={!input.trim()}>
           <SendIcon />

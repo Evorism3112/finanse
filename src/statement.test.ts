@@ -183,6 +183,7 @@ const account = (id: string, name: string, kind: Account['kind'] = 'regular', fa
   nextPaymentDate: null,
   paymentRemindDays: 3,
   favorite,
+  statementDay: null,
 })
 
 describe('основной счёт', () => {

@@ -2599,3 +2599,24 @@ button:disabled {
     bottom: 16px;
   }
 }
+
+/* Голосовой ввод */
+
+.chat-input .voice-btn {
+  border: none;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.voice.listening {
+  background: var(--accent);
+  color: var(--on-accent);
+  opacity: 1;
+  animation: listening 1.2s ease-in-out infinite;
+}
+
+@keyframes listening {
+  50% {
+    box-shadow: 0 0 0 8px rgb(200 245 96 / 0.18);
+  }
+}

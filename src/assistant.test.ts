@@ -27,6 +27,7 @@ const account = (fields: Partial<Account>): Account => ({
   nextPaymentDate: null,
   paymentRemindDays: 3,
   favorite: false,
+  statementDay: null,
   ...fields,
 })
 
@@ -119,6 +120,11 @@ describe('помощник: разбор фраз', () => {
       accountId: credit.id,
       categoryId: 'default-food',
     })
+  })
+
+  test('фраза из голосового ввода: с заглавной буквы и со словом «рублей»', () => {
+    expect(parseOperation('Такси 600 рублей с кредитки', ctx)).toMatchObject({ amount: 60_000, accountId: credit.id, categoryId: 'default-transport', note: 'Такси' })
+    expect(parseOperation('Зарплата 90 тысяч', ctx)).toMatchObject({ type: 'income', amount: 9_000_000 })
   })
 
   test('категория по прошлым операциям пользователя', () => {

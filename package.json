@@ -18,6 +18,7 @@
     "install:linux": "npm run dist:linux && bash desktop/install-linux.sh"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",

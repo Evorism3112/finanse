@@ -28,8 +28,12 @@ import {
   graceToPay,
   isGraceDue,
   isPaymentDue,
+  lastStatementDate,
+  nextStatementDate,
   paymentDueText,
   paymentReminder,
+  statementState,
+  statementText,
 } from './payments'
 import { budgetRows, creditUsage, mainCurrency, monthlySeries } from './stats'
 import { accountBalances, monthlyInterest, monthReport, netWorthByCurrency } from './stats'
@@ -54,6 +58,7 @@ const account = (id: string, currency: string, initialBalance = 0): Account => (
   nextPaymentDate: null,
   paymentRemindDays: 3,
   favorite: false,
+  statementDay: null,
 })
 
 const tx = (fields: Partial<Transaction> & Pick<Transaction, 'type' | 'amount'>): Transaction => ({
@@ -236,6 +241,7 @@ describe('слияние копий', () => {
       nextPaymentDate: null,
       paymentRemindDays: 3,
       favorite: false,
+      statementDay: null,
     }
     expect(normalizeAccount(old)).toEqual(expected)
     const backup = { app: 'finanse', version: 1, exportedAt: 0, accounts: [old], categories: [], transactions: [] }
@@ -673,5 +679,30 @@ describe('напоминания на будущее (для телефона)',
     expect(parseConnection('http://1.2.3.4:8787#old', 'new')).toEqual({ url: 'http://1.2.3.4:8787', token: 'new' })
     expect(parseConnection('http://1.2.3.4:8787', 'key')).toEqual({ url: 'http://1.2.3.4:8787', token: 'key' })
     expect(parseConnection('', 'key').url).toBeNull()
+  })
+})
+
+describe('день выписки кредитной карты', () => {
+  const card = (fields: Partial<Account> = {}): Account => ({ ...account('c', 'RUB', -100_000), kind: 'credit_card', statementDay: 5, ...fields })
+
+  test('ближайшая и последняя дата выписки', () => {
+    expect(nextStatementDate(5, '2026-10-25')).toBe('2026-11-05')
+    expect(nextStatementDate(25, '2026-10-25')).toBe('2026-10-25')
+    expect(nextStatementDate(31, '2026-11-10')).toBe('2026-11-30')
+    expect(lastStatementDate(5, '2026-10-25')).toBe('2026-10-05')
+    expect(lastStatementDate(31, '2026-03-02')).toBe('2026-02-28')
+  })
+
+  test('до выписки платёж ещё считают, после — пора его указать', () => {
+    expect(statementState(card(), -100_000, '2026-10-25')).toEqual({ kind: 'waiting', date: '2026-11-05' })
+    expect(statementText({ kind: 'waiting', date: '2026-11-05' }, '2026-10-25')).toBe('обязательный платёж рассчитают 05.11.26')
+    expect(statementState(card(), -100_000, '2026-10-08')).toEqual({ kind: 'calculated', date: '2026-10-05' })
+    expect(accountReminders(card(), -100_000, '2026-10-08').map((r) => r.id)).toEqual(['c:statement'])
+  })
+
+  test('без долга, с указанным платежом или без дня выписки пометки нет', () => {
+    expect(statementState(card(), 0, '2026-10-25')).toBeNull()
+    expect(statementState(card({ nextPaymentDate: '2026-10-30' }), -100_000, '2026-10-25')).toBeNull()
+    expect(statementState(card({ statementDay: null }), -100_000, '2026-10-25')).toBeNull()
   })
 })
