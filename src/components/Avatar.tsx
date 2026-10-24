@@ -1,25 +1,40 @@
-import type { ReactNode } from 'react'
-import { hueStyle } from '../hue'
+import type { ComponentType, CSSProperties, ReactNode } from 'react'
+import { colorOf } from '../colors'
+import {
+  BoxIcon,
+  BriefcaseIcon,
+  BusIcon,
+  CartIcon,
+  CoffeeIcon,
+  CoinsIcon,
+  FilmIcon,
+  HeartIcon,
+  HouseIcon,
+  PercentIcon,
+  RepeatIcon,
+} from './Icons'
 
-const DEFAULT_ICONS: Record<string, string> = {
-  'default-food': '🛒',
-  'default-transport': '🚌',
-  'default-housing': '🏠',
-  'default-cafe': '🍽️',
-  'default-health': '💊',
-  'default-fun': '🎬',
-  'default-subscriptions': '🔁',
-  'default-interest': '🧾',
-  'default-other-expense': '📦',
-  'default-salary': '💼',
-  'default-other-income': '💰',
+/** Иконки стандартных категорий. Свои категории получают первую букву. */
+const DEFAULT_ICONS: Record<string, ComponentType> = {
+  'default-food': CartIcon,
+  'default-transport': BusIcon,
+  'default-housing': HouseIcon,
+  'default-cafe': CoffeeIcon,
+  'default-health': HeartIcon,
+  'default-fun': FilmIcon,
+  'default-subscriptions': RepeatIcon,
+  'default-interest': PercentIcon,
+  'default-other-expense': BoxIcon,
+  'default-salary': BriefcaseIcon,
+  'default-other-income': CoinsIcon,
 }
 
-/** Цветной кружок записи. Без id — нейтральный, для переводов и «без категории». */
-export function Avatar({ id, label, children }: { id?: string | null; label?: string; children?: ReactNode }) {
-  const content = children ?? (id && DEFAULT_ICONS[id]) ?? [...(label ?? '')][0]?.toUpperCase() ?? '?'
+/** Цветной значок записи. Без id — нейтральный, для переводов и «без категории»; color заменяет цвет по id. */
+export function Avatar({ id, label, color, children }: { id?: string | null; label?: string; color?: string; children?: ReactNode }) {
+  const Icon = id ? DEFAULT_ICONS[id] : undefined
+  const content = children ?? (Icon ? <Icon /> : ([...(label ?? '')][0]?.toUpperCase() ?? '?'))
   return (
-    <span className={id ? 'avatar' : 'avatar neutral'} style={id ? hueStyle(id) : undefined} aria-hidden="true">
+    <span className={id ? 'avatar' : 'avatar neutral'} style={id ? ({ '--c': color ?? colorOf(id) } as CSSProperties) : undefined} aria-hidden="true">
       {content}
     </span>
   )

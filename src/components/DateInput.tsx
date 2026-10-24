@@ -53,7 +53,7 @@ export function DateInput({ value, onChange }: { value: string; onChange: (date:
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
-function Calendar({ value, onClose, onPick }: { value: string; onClose: () => void; onPick: (date: string) => void }) {
+export function Calendar({ value, onClose, onPick }: { value: string; onClose: () => void; onPick: (date: string) => void }) {
   const [month, setMonth] = useState(() => (value ? value.slice(0, 7) : currentMonth()))
   const now = today()
 

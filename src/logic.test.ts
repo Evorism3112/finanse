@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import { accountLabel } from './accountKinds'
 import { upcomingReminders } from './reminders'
 import { changedSince, normalizeServerUrl, parseConnection } from './sync'
-import { assignSlots } from './chartColors'
 import { addDays, dayLabel, formatDate, parseDate, shiftMonth } from './dates'
 import { normalizeCategory, normalizeSubscription } from './db'
 import { normalizeAccount, type Account, type Category, type Subscription, type Transaction } from './db'
@@ -376,41 +375,6 @@ describe('формат даты ДД.ММ.ГГ', () => {
       expect(parseDate(bad)).toBeNull()
     }
     expect(parseDate(formatDate('2026-12-31'))).toBe('2026-12-31')
-  })
-})
-
-describe('цвета диаграммы', () => {
-  const order = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
-
-  test('цвет привязан к записи и не зависит от состава диаграммы', () => {
-    expect(assignSlots(order, ['c', 'a', 'b'])).toEqual([
-      ['a', 0],
-      ['b', 1],
-      ['c', 2],
-    ])
-    // Убрали «a» — цвета оставшихся не изменились.
-    expect(assignSlots(order, ['c', 'b'])).toEqual([
-      ['b', 1],
-      ['c', 2],
-    ])
-  })
-
-  test('при совпадении берётся следующий свободный цвет, повторов нет', () => {
-    // «a» и «i» претендуют на один цвет (0 и 8 % 8).
-    expect(assignSlots(order, ['i', 'a', 'b'])).toEqual([
-      ['a', 0],
-      ['b', 1],
-      ['i', 2],
-    ])
-    const slots = assignSlots(order, ['a', 'i', 'j', 'b', 'h']).map(([, slot]) => slot)
-    expect(new Set(slots).size).toBe(slots.length)
-  })
-
-  test('неизвестные записи идут в конец и получают свободный цвет', () => {
-    const [first, second] = assignSlots(['a', 'b'], ['x', 'b'])
-    expect(first).toEqual(['b', 1])
-    expect(second[0]).toBe('x')
-    expect(second[1]).not.toBe(1)
   })
 })
 

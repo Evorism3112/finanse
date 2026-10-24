@@ -24,7 +24,7 @@ function createWindow() {
     minWidth: 380,
     minHeight: 600,
     autoHideMenuBar: true,
-    backgroundColor: '#0e1312',
+    backgroundColor: '#0a0b0e',
     icon: path.join(DIST, 'icon-512.png'),
     webPreferences: {
       // Сервер синхронизации в домашней сети работает по обычному HTTP — разрешаем обращаться к нему.

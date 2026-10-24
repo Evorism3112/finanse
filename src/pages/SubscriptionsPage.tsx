@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useMemo, useState, type ComponentType, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { defaultAccount } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { DateInput } from '../components/DateInput'
-import { BellIcon, PlusIcon } from '../components/Icons'
+import { ArrowInIcon, BellIcon, PlusIcon, RepeatIcon } from '../components/Icons'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { Modal } from '../components/Modal'
 import { Select } from '../components/Select'
@@ -46,9 +47,9 @@ const REMIND_OPTIONS: [number, string][] = [
 ]
 
 /** Группы списка: сначала доходы, потом расходы. */
-const GROUPS: [CategoryKind, string, string][] = [
-  ['income', 'Доходы', '💰'],
-  ['expense', 'Расходы', '🔁'],
+const GROUPS: [CategoryKind, string, ComponentType][] = [
+  ['income', 'Доходы', ArrowInIcon],
+  ['expense', 'Расходы', RepeatIcon],
 ]
 
 const DIRECTIONS: [CategoryKind, string][] = [
@@ -61,7 +62,13 @@ const MAX_PARTS = 5
 
 const shortPeriod = (period: Period) => PERIODS.find((p) => p.period === period)!.short
 
-export function SubscriptionsPage({ accounts, categories, subscriptions, day }: Data & { day: string }) {
+export function SubscriptionsPage({
+  accounts,
+  categories,
+  subscriptions,
+  day,
+  headerSlot,
+}: Data & { day: string; headerSlot: HTMLElement | null }) {
   const [editing, setEditing] = useState<Subscription | 'new' | null>(null)
   const [paying, setPaying] = useState<Subscription | null>(null)
   const [permission, setPermission] = useState(notifyState)
@@ -117,7 +124,7 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
             </p>
           )}
 
-          {GROUPS.map(([direction, title, icon]) => {
+          {GROUPS.map(([direction, title, GroupIcon]) => {
             const items = sorted.filter((s) => s.direction === direction)
             if (items.length === 0) return null
             const isIncome = direction === 'income'
@@ -125,7 +132,7 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
               <section key={direction}>
                 <div className="group-head">
                   <h3>
-                    <span aria-hidden="true">{icon}</span>
+                    <GroupIcon />
                     {title}
                     <span className="count">{items.length}</span>
                   </h3>
@@ -145,7 +152,7 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
                     return (
                       <li key={s.id}>
                         <button type="button" className="row" onClick={() => setEditing(s)}>
-                          <Avatar id={s.id} label={s.name} />
+                          <Avatar id={s.categoryId ?? s.id} label={s.name} />
                           <span className="row-main">
                             <span>{s.name}</span>
                             <span className={`muted wrap${due ? (daysUntil(s.nextDate, day) < 0 ? ' overdue' : ' soon') : ''}`}>
@@ -177,9 +184,14 @@ export function SubscriptionsPage({ accounts, categories, subscriptions, day }: 
         </div>
       </div>
 
-      <button type="button" className="fab" aria-label="Добавить регулярный платёж" onClick={() => setEditing('new')}>
-        <PlusIcon />
-      </button>
+      {headerSlot &&
+        createPortal(
+          <button type="button" className="header-btn" aria-label="Добавить регулярный платёж" onClick={() => setEditing('new')}>
+            <PlusIcon />
+            Платёж
+          </button>,
+          headerSlot,
+        )}
 
       {editing && (
         <SubscriptionForm
@@ -453,7 +465,7 @@ function SubscriptionForm({
  * Отметка «Получено» / «Оплачено»: фактическая сумма может отличаться от плановой —
  * зарплата с процентами, счёт за свет — поэтому её можно поправить перед записью.
  */
-function PayForm({
+export function PayForm({
   sub,
   accounts,
   categories,

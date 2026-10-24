@@ -40,3 +40,21 @@ export function formatRate(rate: number): string {
 export function amountToInput(minor: number): string {
   return (minor / 100).toFixed(2).replace('.', ',')
 }
+
+/** Знак валюты для подписи у поля суммы: «₽», «$». */
+export function currencySymbol(currency: string): string {
+  return formatAmount(0, currency).replace(/[\d\s ,.]/g, '') || currency
+}
+
+/**
+ * Приводит набранную сумму к виду «1 234,5»: только цифры и одна запятая, не больше двух знаков после неё.
+ * Разряды разделены неразрывным пробелом — parseAmount его понимает.
+ */
+export function typeAmount(raw: string): string {
+  const s = raw.replace(/\./g, ',').replace(/[^\d,]/g, '')
+  const comma = s.indexOf(',')
+  let whole = (comma === -1 ? s : s.slice(0, comma)).replace(/^0+(?=\d)/, '').slice(0, 10)
+  if (comma !== -1 && whole === '') whole = '0'
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return comma === -1 ? grouped : `${grouped},${s.slice(comma + 1).replace(/,/g, '').slice(0, 2)}`
+}

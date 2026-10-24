@@ -9,7 +9,7 @@
   "plugins": {
     "LocalNotifications": {
       "smallIcon": "ic_stat_finanse",
-      "iconColor": "#1f7a5c"
+      "iconColor": "#C8F560"
     }
   }
 }

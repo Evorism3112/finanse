@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react'
-import { assignSlots } from '../chartColors'
+import { colorOf } from '../colors'
 import { Avatar } from '../components/Avatar'
 import { Donut, type Slice } from '../components/Donut'
 import { MonthNav } from '../components/MonthNav'
@@ -146,14 +146,20 @@ function Breakdown({
   const names = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
   const nameOf = (key: string) => names.get(key) ?? 'Без категории'
 
-  // Цвет закреплён за категорией: порядок по времени создания не меняется от месяца к месяцу.
+  // Цвет закреплён за категорией — тот же, что у её значка и на главной.
   const colors = useMemo(() => {
     const order = categories
       .filter((c) => c.kind === kind)
       .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
       .map((c) => c.id)
     const shown = items.length > MAX_SLICES ? items.slice(0, MAX_SLICES - 1) : items
-    return new Map(assignSlots(order, shown.map(keyOf)).map(([key, slot]) => [key, `var(--series-${slot + 1})`]))
+    const position = new Map(order.map((key, i) => [key, i]))
+    return new Map(
+      shown
+        .map(keyOf)
+        .sort((a, b) => (position.get(a) ?? order.length) - (position.get(b) ?? order.length))
+        .map((key) => [key, key ? colorOf(key) : NEUTRAL]),
+    )
   }, [categories, kind, items])
 
   if (items.length === 0) return null

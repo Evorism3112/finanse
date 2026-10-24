@@ -127,3 +127,135 @@ export const UploadIcon = () => (
     <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v5h14v-5" />
   </Icon>
 )
+
+export const HomeIcon = () => (
+  <Icon>
+    <path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z" />
+  </Icon>
+)
+
+export const SettingsIcon = () => (
+  <Icon>
+    <path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4" />
+  </Icon>
+)
+
+export const SearchIcon = () => (
+  <Icon>
+    <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4" />
+  </Icon>
+)
+
+export const CardIcon = () => (
+  <Icon>
+    <path d="M3 6h18v12H3zM3 10h18M7 15h3" />
+  </Icon>
+)
+
+export const BankIcon = () => (
+  <Icon>
+    <path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" />
+  </Icon>
+)
+
+export const PercentIcon = () => (
+  <Icon>
+    <path d="M19 5 5 19M7 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" />
+  </Icon>
+)
+
+export const CartIcon = () => (
+  <Icon>
+    <path d="M3 4h2l2.4 11h11L21 8H6.2M9 20h.01M18 20h.01" />
+  </Icon>
+)
+
+export const BusIcon = () => (
+  <Icon>
+    <path d="M6 4h12a2 2 0 0 1 2 2v10H4V6a2 2 0 0 1 2-2zM4 11h16M7 16v3M17 16v3M8 13.5h.01M16 13.5h.01" />
+  </Icon>
+)
+
+export const HouseIcon = () => (
+  <Icon>
+    <path d="M4 21V9l8-6 8 6v12M9 21v-7h6v7" />
+  </Icon>
+)
+
+export const CoffeeIcon = () => (
+  <Icon>
+    <path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 10h1.5a2.5 2.5 0 0 1 0 5H17M8 3v2M12 3v2" />
+  </Icon>
+)
+
+export const HeartIcon = () => (
+  <Icon>
+    <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+  </Icon>
+)
+
+export const FilmIcon = () => (
+  <Icon>
+    <path d="M4 5h16v14H4zM8 5v14M16 5v14M4 9.5h4M4 14.5h4M16 9.5h4M16 14.5h4" />
+  </Icon>
+)
+
+export const BoxIcon = () => (
+  <Icon>
+    <path d="M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" />
+  </Icon>
+)
+
+export const BriefcaseIcon = () => (
+  <Icon>
+    <path d="M4 8h16v11H4zM9 8V5h6v3M4 13h16" />
+  </Icon>
+)
+
+export const CoinsIcon = () => (
+  <Icon>
+    <path d="M9 10a6 3 0 1 0 0-.01zM3 10v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4M15 7.5c3.3 0 6 1.3 6 3v4c0 1.7-2.7 3-6 3" />
+  </Icon>
+)
+
+export const ArrowInIcon = () => (
+  <Icon>
+    <path d="M17 7 7 17M15 17H7V9" />
+  </Icon>
+)
+
+export const ArrowOutIcon = () => (
+  <Icon>
+    <path d="M7 17 17 7M9 7h8v8" />
+  </Icon>
+)
+
+export const BackspaceIcon = () => (
+  <Icon width={1.9}>
+    <path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7zM12 9.5l5 5M17 9.5l-5 5" />
+  </Icon>
+)
+
+export const SwapIcon = () => (
+  <Icon>
+    <path d="M8 4v16M8 4 4 8M8 4l4 4M16 20V4M16 20l-4-4M16 20l4-4" />
+  </Icon>
+)
+
+export const PencilIcon = () => (
+  <Icon>
+    <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
+  </Icon>
+)
+
+export const ClockIcon = () => (
+  <Icon>
+    <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2" />
+  </Icon>
+)
+
+export const ShieldIcon = () => (
+  <Icon>
+    <path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zM9 12l2 2 4-4" />
+  </Icon>
+)

@@ -1,3 +1,5 @@
+import type { ComponentType } from 'react'
+import { BankIcon, CardIcon, PercentIcon, WalletIcon } from './components/Icons'
 import type { Account, AccountKind } from './db'
 
 export const ACCOUNT_KINDS: {
@@ -8,12 +10,14 @@ export const ACCOUNT_KINDS: {
   short: string
   /** Если название уже содержит это слово, пометка не нужна: «Кредитка Кредитка» не пишем. */
   stem: RegExp
-  icon: string | null
+  Icon: ComponentType
+  /** Цвет значка счетов этого типа. */
+  color: string
 }[] = [
-  { kind: 'regular', group: 'Обычные счета', label: 'Обычный счёт', short: 'Счёт', stem: /сч[её]т/i, icon: null },
-  { kind: 'savings', group: 'Сбережения', label: 'Сберегательный счёт', short: 'Накоп.', stem: /накоп|сбереж|вклад/i, icon: '🏦' },
-  { kind: 'credit_card', group: 'Кредитные карты', label: 'Кредитная карта', short: 'Кредитка', stem: /кред/i, icon: '💳' },
-  { kind: 'loan', group: 'Кредиты', label: 'Кредит', short: 'Кредит', stem: /кред|ипотек|за[её]м|займ/i, icon: '📄' },
+  { kind: 'regular', group: 'Обычные счета', label: 'Обычный счёт', short: 'Счёт', stem: /сч[её]т/i, Icon: WalletIcon, color: '#7AA7FF' },
+  { kind: 'savings', group: 'Сбережения', label: 'Сберегательный счёт', short: 'Накоп.', stem: /накоп|сбереж|вклад/i, Icon: BankIcon, color: '#5ED3E6' },
+  { kind: 'credit_card', group: 'Кредитные карты', label: 'Кредитная карта', short: 'Кредитка', stem: /кред/i, Icon: CardIcon, color: '#FFB35C' },
+  { kind: 'loan', group: 'Кредиты', label: 'Кредит', short: 'Кредит', stem: /кред|ипотек|за[её]м|займ/i, Icon: PercentIcon, color: '#B69CFF' },
 ]
 
 export const ACCOUNT_KIND_ORDER: AccountKind[] = ACCOUNT_KINDS.map((k) => k.kind)

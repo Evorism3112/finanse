@@ -42,6 +42,13 @@ const flow = async () => {
     if (document.querySelector('.sheet')) throw new Error('список не закрылся после выбора')
     if (!field(label).textContent.trim().endsWith(optionText)) throw new Error(`в поле «${label}» не показан выбор «${optionText}»`)
   }
+  // Форма операции: категория — плиткой, отправка — кнопкой «Добавить …» или «Сохранить».
+  const pick = async (name) => {
+    click('.cat-tile', name)
+    await sleep(50)
+    if (document.querySelector('.cat-tile.active')?.lastChild.textContent !== name) throw new Error(`не выбрана категория «${name}»`)
+  }
+  const submitTx = () => document.querySelector('.modal.quick button[type="submit"]').click()
   const norm = (s) => s.replace(/[  ]/g, ' ')
   const steps = []
   const snap = (name) => steps.push(`--- ${name} ---\n${norm(text())}`)
@@ -71,25 +78,25 @@ const flow = async () => {
   click('nav button', 'Операции')
   await waitFor('операций нет')
   click('button', 'Добавить операцию')
-  await waitFor('Новая операция')
+  await waitFor('Комментарий')
   fill('Сумма', 'abc')
-  click('button', 'Сохранить')
+  submitTx()
   await waitFor('Введите сумму больше нуля')
   fill('Сумма', '250,50')
-  await choose('Категория', 'Продукты')
+  await pick('Продукты')
   fill('Комментарий', 'молоко')
-  click('button', 'Сохранить')
+  submitTx()
   await waitFor('молоко')
 
   click('button', 'Добавить операцию')
-  await waitFor('Новая операция')
+  await waitFor('Комментарий')
   click('.segmented button', 'Перевод')
   await sleep(50)
   fill('Сумма', '180')
   await choose('На счёт', 'Доллары')
   await waitFor('Сумма зачисления, USD')
   fill('Сумма зачисления', '2')
-  click('button', 'Сохранить')
+  submitTx()
   await waitFor('Счёт Карта → Счёт Доллары')
   snap('операции')
 
@@ -97,7 +104,7 @@ const flow = async () => {
   await waitFor('Всего')
   snap('остатки')
 
-  click('nav button', 'Отчёт')
+  click('nav button', 'Аналитика')
   await waitFor('Расходы по категориям')
   snap('отчёт')
 
@@ -137,13 +144,13 @@ const flow = async () => {
     click('nav button', 'Операции')
     await sleep(100)
     click('button', 'Добавить операцию')
-    await waitFor('Новая операция')
+    await waitFor('Комментарий')
     click('.segmented button', type)
     await sleep(50)
     fill('Сумма', amount)
-    await choose('Категория', category)
+    await pick(category)
     fill('Комментарий', note)
-    click('button', 'Сохранить')
+    submitTx()
     await waitFor(note)
   }
   await addTx('Доход', '85000', 'Зарплата', 'аванс')
@@ -172,12 +179,12 @@ const flow = async () => {
   click('nav button', 'Операции')
   await sleep(150)
   click('button', 'Добавить операцию')
-  await waitFor('Новая операция')
+  await waitFor('Комментарий')
   click('.segmented button', 'Перевод')
   await sleep(50)
   fill('Сумма', '20000')
   await choose('На счёт', 'Автокредит')
-  click('button', 'Сохранить')
+  submitTx()
   await waitFor('Счёт Карта → Автокредит')
   click('nav button', 'Счета')
   await waitFor('Погашено')
@@ -224,9 +231,12 @@ const flow = async () => {
   await sleep(200)
 
   await addSub('Кино', '399', 'Каждый месяц', 2)
-  click('nav button', 'Операции')
-  await waitFor('Кино: списание через 2 дн.')
-  snap('баннер напоминания')
+  // Напоминание — на главной, в блоке «Требует внимания».
+  click('nav button', 'Главная')
+  await waitFor('Требует внимания')
+  await waitFor('Кино ·')
+  await waitFor('списание через 2 дн.')
+  snap('напоминание на главной')
 
   // Оплата отмечается кнопкой прямо в строке, без захода в форму.
   click('nav button', 'Регулярные')
@@ -263,7 +273,8 @@ const flow = async () => {
   await waitFor('По плану было')
   document.querySelector('.modal button[type="submit"]').click()
   await sleep(300)
-  if (!norm(text()).includes('+90 000,00 ₽ / мес.')) throw new Error('плановая сумма изменилась:\n' + norm(text()))
+  // На узком экране «/ мес.» переносится на следующую строку.
+  if (!/\+90 000,00 ₽\s*\/ мес\./.test(norm(text()))) throw new Error('плановая сумма изменилась:\n' + norm(text()))
   // Списки доходов и расходов разделены.
   const heads = [...document.querySelectorAll('.split-main .group-head h3')].map((h) => h.textContent)
   if (heads.length !== 2 || !heads[0].includes('Доходы') || !heads[1].includes('Расходы')) throw new Error('группы: ' + heads.join(' | '))
@@ -293,7 +304,7 @@ const flow = async () => {
   if (!norm(text()).includes('Итого в месяц: 60 000,00 ₽')) throw new Error('итог выплат:\n' + norm(text()))
   click('button', 'Сохранить')
   await waitFor('ЗП частями')
-  const partsRow = () => norm([...document.querySelectorAll('.list li')].find((li) => li.textContent.includes('ЗП частями')).innerText)
+  const partsRow = () => norm([...document.querySelectorAll('.list li')].find((li) => li.textContent.includes('ЗП частями')).innerText).replace(/\s*\n\s*/g, ' ')
   if (!partsRow().includes('поступление завтра') || !partsRow().includes('+24 000,00 ₽ из 60 000,00 ₽ в мес.')) throw new Error('первая выплата:\n' + partsRow())
   // Отметка первой выплаты переводит запись на вторую, с её суммой.
   click('.chip', 'Получено')
@@ -324,13 +335,14 @@ const flow = async () => {
   await typeSearch('')
   await waitFor('Доходы')
 
-  // Напоминание о резервной копии исчезает после экспорта.
+  // Напоминание о резервной копии — на главной; исчезает после экспорта.
+  click('nav button', 'Главная')
   await waitFor('Резервная копия ещё не сохранялась')
   click('nav button', 'Ещё')
   await waitFor('Копия с этого устройства ещё не сохранялась')
   click('button', 'Экспорт в файл')
   await waitFor('Последняя копия с этого устройства')
-  click('nav button', 'Операции')
+  click('nav button', 'Главная')
   await sleep(200)
   if (text().includes('Резервная копия ещё не сохранялась')) throw new Error('напоминание о копии не исчезло')
 
@@ -357,8 +369,9 @@ const flow = async () => {
   click('button', 'Сохранить')
   await waitFor('платёж через 2 дн.')
   snap('кредит с графиком')
-  click('nav button', 'Операции')
-  await waitFor('Автокредит: платёж через 2 дн.')
+  click('nav button', 'Главная')
+  await waitFor('Требует внимания')
+  await waitFor('платёж через 2 дн.')
 
   await payChip('Автокредит')
   await waitFor('Взнос: Автокредит')
@@ -385,8 +398,10 @@ const flow = async () => {
   snap('после взноса')
   click('nav button', 'Операции')
   await waitFor('Карта → Автокредит')
-  if (text().includes('Автокредит: платёж')) throw new Error('напоминание о взносе не исчезло')
   if (!text().includes('Проценты по кредитам')) throw new Error('нет расхода на проценты')
+  click('nav button', 'Главная')
+  await sleep(200)
+  if (text().includes('платёж через')) throw new Error('напоминание о взносе не исчезло')
 
   // Кредитка: проценты в долге не занимают лимит, полное погашение снимает график.
   await openAccount('Кредитка')
@@ -398,8 +413,8 @@ const flow = async () => {
   click('button', 'Сохранить')
   await waitFor('платёж через 5 дн.')
   if (!norm(text()).includes('через 6 дн. · погасить 10 000,00 ₽')) throw new Error('строка льготного периода:\n' + norm(text()))
-  click('nav button', 'Операции')
-  await waitFor('Кредитка: льготный период заканчивается через 6 дн.')
+  click('nav button', 'Главная')
+  await waitFor('льготный период заканчивается через 6 дн.')
   click('nav button', 'Счета')
   await waitFor('Доступно 80')
   if (!norm(text()).includes('Доступно 80 000,00 ₽ из 100 000,00 ₽ · проценты 3 500,00 ₽')) throw new Error('лимит с процентами:\n' + norm(text()))
@@ -417,7 +432,7 @@ const flow = async () => {
   click('nav button', 'Счета')
   await waitFor('через 40 дн.')
   if (!norm(text()).includes('через 40 дн. · погасить 13 500,00 ₽')) throw new Error('новый льготный период:\n' + norm(text()))
-  click('nav button', 'Операции')
+  click('nav button', 'Главная')
   await sleep(200)
   if (text().includes('льготный период заканчивается')) throw new Error('напоминание о льготном периоде не исчезло')
 
@@ -433,7 +448,7 @@ const flow = async () => {
   if (text().includes('без % до')) throw new Error('льготный период не снят после полного погашения')
 
   // Отчёт: лимит категории и динамика.
-  click('nav button', 'Отчёт')
+  click('nav button', 'Аналитика')
   await waitFor('Лимиты на месяц')
   await waitFor('Динамика за 6 месяцев')
   if (!norm(text()).includes('Осталось 1 759,50 ₽')) throw new Error('остаток лимита:\n' + norm(text()))
@@ -485,11 +500,11 @@ if (!failed) {
   try {
     await browser.setViewport(400, 820)
     await shot('1-ops', `click('nav button', 'Операции')`)
-    await shot('2-form', `click('button', 'Добавить операцию'); await waitFor('Новая операция')`)
+    await shot('2-form', `click('button', 'Добавить операцию'); await waitFor('Комментарий')`)
     await shot('2b-select', `[...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Счёт')).querySelector('button.select').click()`)
-    await shot('2c-select-category', `document.querySelector('.sheet [aria-label="Закрыть список"]').click(); await sleep(100); [...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Категория')).querySelector('button.select').click()`)
+    await shot('2c-category-tile', `document.querySelector('.sheet [aria-label="Закрыть список"]').click(); await sleep(100); click('.cat-tile', 'Продукты'); await sleep(100); if (!document.querySelector('.cat-tile.active')) throw new Error('плитка категории не выбралась'); [...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith('Счёт')).querySelector('button.select').click()`)
     await shot('2d-closed', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await sleep(100); if (document.querySelector('.sheet')) throw new Error('Escape не закрыл список'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под списком')`)
-    await shot('2e-calendar', `document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты'); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100); if (document.querySelector('.calendar')) throw new Error('Escape не закрыл календарь'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под календарём'); document.querySelector('[aria-label="Открыть календарь"]').click(); await waitFor('Выбор даты')`)
+    await shot('2e-calendar', `document.querySelector('[aria-label="Выбрать дату"]').click(); await waitFor('Выбор даты'); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(100); if (document.querySelector('.calendar')) throw new Error('Escape не закрыл календарь'); if (!document.querySelector('.modal')) throw new Error('Escape закрыл и форму под календарём'); document.querySelector('[aria-label="Выбрать дату"]').click(); await waitFor('Выбор даты')`)
     await shot('2f-picked', `
       document.querySelector('.calendar [aria-label="Предыдущий месяц"]').click(); await sleep(80)
       const head = document.querySelector('.calendar-nav span').textContent
@@ -497,17 +512,17 @@ if (!failed) {
       if (document.querySelector('.calendar .weekday').textContent !== 'Пн') throw new Error('неделя не с понедельника')
       ;[...document.querySelectorAll('.calendar .day')].find((d) => d.textContent === '15').click(); await sleep(100)
       if (document.querySelector('.calendar')) throw new Error('календарь не закрылся после выбора')
-      const v = document.querySelector('.date-input input').value
+      const v = document.querySelector('[aria-label="Выбрать дату"]').textContent.trim()
       if (!/^15\\.\\d\\d\\.\\d\\d$/.test(v)) throw new Error('дата после выбора: ' + v)
     `)
     await shot('3-accounts', `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(150); if (document.querySelector('.modal')) throw new Error('Escape не закрыл форму'); click('nav button', 'Счета')`)
-    await shot('4-report', `click('nav button', 'Отчёт')`)
+    await shot('4-report', `click('nav button', 'Аналитика')`)
     await browser.setViewport(1500, 820)
     await shot('7-wide-account', `click('nav button', 'Счета'); await sleep(200); [...document.querySelectorAll('.row')].find((r) => r.textContent.includes('Автокредит')).click(); await waitFor('Тип счёта'); await sleep(300); const m = document.querySelector('.modal'); if (m.scrollHeight > m.clientHeight + 1) throw new Error('форма счёта не помещается без прокрутки: ' + m.scrollHeight + ' > ' + m.clientHeight)`)
     await shot('8-wide-payment', `click('button', 'Закрыть'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:'); await sleep(300)`)
     await shot('w1-accounts', `click('button', 'Закрыть'); await sleep(200)`)
     await shot('w2-ops', `click('nav button', 'Операции')`)
-    await shot('w3-report', `click('nav button', 'Отчёт')`)
+    await shot('w3-report', `click('nav button', 'Аналитика')`)
     await shot('w4-subs', `click('nav button', 'Регулярные')`)
     await shot('w5-more', `click('nav button', 'Ещё'); await sleep(100); if (document.documentElement.scrollWidth > window.innerWidth) throw new Error('горизонтальная прокрутка на широком экране')`)
     await shot('w6-accounts-again', `click('nav button', 'Счета'); await sleep(200); document.querySelector('.chip').click(); await waitFor('Взнос:')`)

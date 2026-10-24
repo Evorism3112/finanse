@@ -162,7 +162,15 @@ export function AccountForm({
             value={kind}
             disabled={!!account}
             onChange={(v) => setKind(v as AccountKind)}
-            options={ACCOUNT_KINDS.map((k) => ({ value: k.kind, label: k.label, icon: <Avatar>{k.icon ?? '👛'}</Avatar> }))}
+            options={ACCOUNT_KINDS.map((k) => ({
+              value: k.kind,
+              label: k.label,
+              icon: (
+                <Avatar>
+                  <k.Icon />
+                </Avatar>
+              ),
+            }))}
           />
         </label>
 

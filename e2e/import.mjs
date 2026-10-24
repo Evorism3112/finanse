@@ -100,7 +100,7 @@ const scenario = async (csv, pdf) => {
   click('nav button', 'Операции')
   await sleep(150)
   click('button', 'Добавить операцию')
-  await waitFor('Новая операция')
+  await waitFor('Комментарий')
   if (!field('Счёт').textContent.includes('Альфа')) throw new Error('по умолчанию выбран не основной счёт: ' + field('Счёт').textContent)
   field('Счёт').click()
   await sleep(100)

@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { ACCOUNT_KINDS, isDebtKind } from '../accountKinds'
 import { Avatar } from '../components/Avatar'
 import { PlusIcon, StarIcon } from '../components/Icons'
@@ -52,46 +53,56 @@ function describe(a: Account, balance: number): { sub: string; progress: number 
   return { sub: parts.join(' · ') || a.currency, progress, usage }
 }
 
-export function AccountsPage({ accounts, categories, transactions, day }: Data & { day: string }) {
+export function AccountsPage({
+  accounts,
+  categories,
+  transactions,
+  day,
+  headerSlot,
+}: Data & { day: string; headerSlot: HTMLElement | null }) {
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
   const [paying, setPaying] = useState<Account | null>(null)
 
   const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions])
   const worth = useMemo(() => netWorthByCurrency(accounts, balances), [accounts, balances])
-  const hasDebts = worth.some((w) => w.debts > 0)
 
   return (
     <>
-      <div className="summary-row">
-        {worth.length > 0 && (
-          <div className="hero">
-            <span>{hasDebts ? 'Всего с учётом долгов' : 'Всего на счетах'}</span>
-            {worth.map((w) => (
-              <strong key={w.currency}>{formatAmount(w.assets - w.debts, w.currency)}</strong>
-            ))}
-          </div>
-        )}
-
-        {worth
-          .filter((w) => w.debts > 0)
-          .map((w) => (
-            <div key={w.currency} className="tiles">
-              <div className="tile">
-                <span className="muted">Свои средства</span>
-                <strong className="amount income">{formatAmount(w.assets, w.currency)}</strong>
-              </div>
-              <div className="tile">
-                <span className="muted">Долги</span>
-                <strong className="amount expense">{formatAmount(w.debts, w.currency)}</strong>
-              </div>
-            </div>
-          ))}
-      </div>
+      {worth.map((w) => (
+          <section key={w.currency} className="hero">
+            <span>{w.debts > 0 ? 'Капитал с учётом долгов' : 'Всего на счетах'}</span>
+            <strong>{formatAmount(w.assets - w.debts, w.currency)}</strong>
+            {w.debts > 0 && (
+              <>
+                <div className="stack-bar" aria-hidden="true">
+                  <span style={{ flexGrow: w.assets, background: 'var(--accent)' }} />
+                  <span style={{ flexGrow: w.debts, background: 'var(--expense)' }} />
+                </div>
+                <div className="hero-split">
+                  <div>
+                    <span className="muted">
+                      <span className="swatch" style={{ background: 'var(--accent)' }} />
+                      Свои средства
+                    </span>
+                    <b>{formatAmount(w.assets, w.currency)}</b>
+                  </div>
+                  <div>
+                    <span className="muted">
+                      <span className="swatch" style={{ background: 'var(--expense)' }} />
+                      Долги
+                    </span>
+                    <b>{formatAmount(w.debts, w.currency)}</b>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+      ))}
 
       {accounts.length === 0 && <p className="empty">Счетов пока нет. Добавьте первый — например, «Наличные» или «Карта».</p>}
 
       <div className="groups">
-        {ACCOUNT_KINDS.map(({ kind, group, icon }) => {
+        {ACCOUNT_KINDS.map(({ kind, group, Icon, color }) => {
           const items = accounts.filter((a) => a.kind === kind)
           if (items.length === 0) return null
           // Итог группы по каждой валюте.
@@ -101,7 +112,7 @@ export function AccountsPage({ accounts, categories, transactions, day }: Data &
             <section key={kind}>
               <div className="group-head">
                 <h3>
-                  <span aria-hidden="true">{icon ?? '👛'}</span>
+                  <Icon />
                   {group}
                   <span className="count">{items.length}</span>
                 </h3>
@@ -120,8 +131,8 @@ export function AccountsPage({ accounts, categories, transactions, day }: Data &
                   return (
                     <li key={a.id}>
                       <button type="button" className="row" onClick={() => setEditing(a)}>
-                        <Avatar id={a.id} label={a.name}>
-                          {icon}
+                        <Avatar id={a.id} label={a.name} color={color}>
+                          <Icon />
                         </Avatar>
                         <span className="row-main">
                           <span className="name">
@@ -179,9 +190,14 @@ export function AccountsPage({ accounts, categories, transactions, day }: Data &
         })}
       </div>
 
-      <button type="button" className="fab" aria-label="Добавить счёт" onClick={() => setEditing('new')}>
-        <PlusIcon />
-      </button>
+      {headerSlot &&
+        createPortal(
+          <button type="button" className="header-btn" aria-label="Добавить счёт" onClick={() => setEditing('new')}>
+            <PlusIcon />
+            Счёт
+          </button>,
+          headerSlot,
+        )}
 
       {editing && (
         <AccountForm

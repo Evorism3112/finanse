@@ -19,8 +19,8 @@ export function accountOptions(accounts: Account[]): SelectOption[] {
       hint: a === favorite ? `${a.currency} · основной` : a.currency,
       group,
       icon: (
-        <Avatar id={a.id} label={a.name}>
-          {kind.icon}
+        <Avatar id={a.id} label={a.name} color={kind.color}>
+          <kind.Icon />
         </Avatar>
       ),
     }
