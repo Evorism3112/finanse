@@ -1,42 +1,19 @@
-import { Fragment, useMemo, useState, type ComponentType, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { defaultAccount } from '../accountKinds'
+import { CARD_COLOR } from '../cards'
 import { Avatar } from '../components/Avatar'
-import { DateInput } from '../components/DateInput'
-import { ArrowInIcon, BellIcon, PlusIcon, RepeatIcon } from '../components/Icons'
 import { ConfirmButton } from '../components/ConfirmButton'
+import { DateInput } from '../components/DateInput'
+import { BellIcon, CardIcon, PlusIcon } from '../components/Icons'
 import { Modal } from '../components/Modal'
-import { Select } from '../components/Select'
+import { Select, type SelectOption } from '../components/Select'
 import { formatDate, today } from '../dates'
-import {
-  db,
-  deleted,
-  newRecord,
-  touched,
-  type Account,
-  type Category,
-  type CategoryKind,
-  type Data,
-  type Installment,
-  type Period,
-  type Subscription,
-} from '../db'
+import { db, deleted, newRecord, touched, type Account, type Data, type Period, type Subscription } from '../db'
 import { amountToInput, formatAmount, parseAmount } from '../money'
 import { notifyState, requestNotifications } from '../notify'
-import { accountOptions, categoryOptions, CURRENCY_OPTIONS } from '../selectOptions'
+import { CURRENCY_OPTIONS } from '../selectOptions'
 import { paySubscription } from '../subscriptionActions'
-import {
-  addPeriod,
-  daysUntil,
-  dueText,
-  installmentAt,
-  installmentsTotal,
-  isDue,
-  monthlyTotals,
-  advanceSubscription,
-  PERIODS,
-  upcomingInstallment,
-} from '../subscriptions'
+import { addPeriod, advanceSubscription, daysUntil, dueText, isDue, monthlyCost, monthlyTotals, PERIODS } from '../subscriptions'
 
 const REMIND_OPTIONS: [number, string][] = [
   [0, 'В день платежа'],
@@ -46,29 +23,28 @@ const REMIND_OPTIONS: [number, string][] = [
   [14, 'За 2 недели'],
 ]
 
-/** Группы списка: сначала доходы, потом расходы. */
-const GROUPS: [CategoryKind, string, ComponentType][] = [
-  ['income', 'Доходы', ArrowInIcon],
-  ['expense', 'Расходы', RepeatIcon],
-]
-
-const DIRECTIONS: [CategoryKind, string][] = [
-  ['expense', 'Расход'],
-  ['income', 'Доход'],
-]
-
-/** На сколько выплат в месяц можно разбить регулярный доход. */
-const MAX_PARTS = 5
-
 const shortPeriod = (period: Period) => PERIODS.find((p) => p.period === period)!.short
 
-export function SubscriptionsPage({
-  accounts,
-  categories,
-  subscriptions,
-  day,
-  headerSlot,
-}: Data & { day: string; headerSlot: HTMLElement | null }) {
+/** Кредитки для выбора; первым — вариант без карты. */
+function cardOptions(cards: Account[], none: string): SelectOption[] {
+  return [
+    { value: '', label: none, icon: <Avatar label="—" /> },
+    ...[...cards]
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .map((a) => ({
+        value: a.id,
+        label: a.name,
+        hint: a.currency,
+        icon: (
+          <Avatar id={a.id} label={a.name} color={CARD_COLOR}>
+            <CardIcon />
+          </Avatar>
+        ),
+      })),
+  ]
+}
+
+export function SubscriptionsPage({ accounts, subscriptions, day, headerSlot }: Data & { day: string; headerSlot: HTMLElement | null }) {
   const [editing, setEditing] = useState<Subscription | 'new' | null>(null)
   const [paying, setPaying] = useState<Subscription | null>(null)
   const [permission, setPermission] = useState(notifyState)
@@ -77,39 +53,30 @@ export function SubscriptionsPage({
     () => [...subscriptions].sort((a, b) => a.nextDate.localeCompare(b.nextDate) || a.name.localeCompare(b.name, 'ru')),
     [subscriptions],
   )
-  const expenses = useMemo(() => monthlyTotals(subscriptions.filter((s) => s.direction === 'expense')), [subscriptions])
-  const incomes = useMemo(() => monthlyTotals(subscriptions.filter((s) => s.direction === 'income')), [subscriptions])
+  const totals = useMemo(() => monthlyTotals(subscriptions), [subscriptions])
+  const cardById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
   return (
     <>
       <div className="split">
+        {/* Итоги — сверху на телефоне, справа на широком экране. */}
         <aside className="split-side">
-          {expenses.length > 0 && (
+          {totals.length > 0 && (
             <div className="hero">
-              <span>Регулярные расходы в месяц</span>
-              {expenses.map(([currency, total]) => (
+              <span>Подписки в месяц</span>
+              {totals.map(([currency, total]) => (
                 <strong key={currency}>{formatAmount(total, currency)}</strong>
               ))}
-            </div>
-          )}
-
-          {incomes.length > 0 && (
-            <div className="tiles one">
-              <div className="tile">
-                <span className="muted">Регулярные доходы в месяц</span>
-                {incomes.map(([currency, total]) => (
-                  <strong key={currency} className="amount income">
-                    +{formatAmount(total, currency)}
-                  </strong>
-                ))}
-              </div>
+              <span className="hero-extra">
+                в год ≈ {totals.map(([currency, total]) => formatAmount(total * 12, currency)).join(', ')}
+              </span>
             </div>
           )}
 
           {subscriptions.length > 0 && permission === 'default' && (
             <div className="card notice">
               <BellIcon />
-              <span>Включите уведомления, чтобы получать напоминания о платежах.</span>
+              <span>Включите уведомления, чтобы получать напоминания о списаниях.</span>
               <button type="button" className="primary" onClick={async () => setPermission(await requestNotifications())}>
                 Включить
               </button>
@@ -119,197 +86,96 @@ export function SubscriptionsPage({
 
         <div className="split-main">
           {subscriptions.length === 0 && (
-            <p className="empty">
-              Здесь живут подписки, аренда, зарплата и всё, что повторяется. Добавьте запись — приложение напомнит о сроке.
-            </p>
+            <p className="empty">Подписок пока нет. Добавьте первую — приложение напомнит о списании или о конце оплаченного срока.</p>
           )}
 
-          {GROUPS.map(([direction, title, GroupIcon]) => {
-            const items = sorted.filter((s) => s.direction === direction)
-            if (items.length === 0) return null
-            const isIncome = direction === 'income'
-            return (
-              <section key={direction}>
-                <div className="group-head">
-                  <h3>
-                    <GroupIcon />
-                    {title}
-                    <span className="count">{items.length}</span>
-                  </h3>
-                  <span className="group-total">
-                    {(isIncome ? incomes : expenses).map(([currency, total]) => (
-                      <span key={currency} className={isIncome ? 'amount income' : 'amount'}>
-                        {isIncome ? '+' : ''}
-                        {formatAmount(total, currency)}
-                        <span className="muted"> в мес.</span>
+          {sorted.length > 0 && (
+            <ul className="list">
+              {sorted.map((s) => {
+                const due = isDue(s, day)
+                const card = s.accountId ? cardById.get(s.accountId) : undefined
+                return (
+                  <li key={s.id}>
+                    <button type="button" className="row" onClick={() => setEditing(s)}>
+                      <Avatar id={s.id} label={s.name} />
+                      <span className="row-main">
+                        <span>{s.name}</span>
+                        <span className={`muted wrap${due ? (daysUntil(s.nextDate, day) < 0 ? ' overdue' : ' soon') : ''}`}>
+                          {dueText(s, day)} · {formatDate(s.nextDate)}
+                          {card ? ` · ${card.name}` : ''}
+                        </span>
                       </span>
-                    ))}
-                  </span>
-                </div>
-                <ul className="list">
-                  {items.map((s) => {
-                    const due = isDue(s, day)
-                    return (
-                      <li key={s.id}>
-                        <button type="button" className="row" onClick={() => setEditing(s)}>
-                          <Avatar id={s.categoryId ?? s.id} label={s.name} />
-                          <span className="row-main">
-                            <span>{s.name}</span>
-                            <span className={`muted wrap${due ? (daysUntil(s.nextDate, day) < 0 ? ' overdue' : ' soon') : ''}`}>
-                              {dueText(s, day)} · {formatDate(s.nextDate)}
-                            </span>
-                          </span>
-                          <span className={isIncome ? 'amount split income' : 'amount split'}>
-                            {isIncome ? '+' : ''}
-                            {formatAmount(s.amount, s.currency)}
-                            <span className="muted">
-                              {s.installments?.length
-                                ? ` из ${formatAmount(installmentsTotal(s.installments), s.currency)} в мес.`
-                                : ` / ${shortPeriod(s.period)}`}
-                            </span>
-                          </span>
-                        </button>
-                        <div className="row-actions">
-                          <button type="button" className="chip" onClick={() => setPaying(s)}>
-                            {isIncome ? 'Получено' : 'Оплачено'}
-                          </button>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            )
-          })}
+                      <span className="amount per">
+                        {formatAmount(s.amount, s.currency)}
+                        <span className="muted"> / {shortPeriod(s.period)}</span>
+                      </span>
+                    </button>
+                    <div className="row-actions">
+                      <button type="button" className="chip" onClick={() => setPaying(s)}>
+                        Оплачено
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       </div>
 
       {headerSlot &&
         createPortal(
-          <button type="button" className="header-btn" aria-label="Добавить регулярный платёж" onClick={() => setEditing('new')}>
+          <button type="button" className="header-btn" aria-label="Добавить подписку" onClick={() => setEditing('new')}>
             <PlusIcon />
-            Платёж
+            Подписка
           </button>,
           headerSlot,
         )}
 
-      {editing && (
-        <SubscriptionForm
-          sub={editing === 'new' ? null : editing}
-          accounts={accounts}
-          categories={categories}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      {editing && <SubscriptionForm sub={editing === 'new' ? null : editing} cards={accounts} onClose={() => setEditing(null)} />}
 
-      {paying && <PayForm sub={paying} accounts={accounts} categories={categories} onClose={() => setPaying(null)} />}
+      {paying && <PayForm sub={paying} cards={accounts} onClose={() => setPaying(null)} />}
     </>
   )
 }
 
-function SubscriptionForm({
-  sub,
-  accounts,
-  categories,
-  onClose,
-}: {
-  sub: Subscription | null
-  accounts: Account[]
-  categories: Category[]
-  onClose: () => void
-}) {
-  const [direction, setDirection] = useState<CategoryKind>(sub?.direction ?? 'expense')
+function SubscriptionForm({ sub, cards, onClose }: { sub: Subscription | null; cards: Account[]; onClose: () => void }) {
   const [name, setName] = useState(sub?.name ?? '')
   const [amount, setAmount] = useState(sub ? amountToInput(sub.amount) : '')
   const [period, setPeriod] = useState<Period>(sub?.period ?? 'month')
   const [nextDate, setNextDate] = useState(sub?.nextDate ?? addPeriod(today(), 'month'))
   const [autoRenew, setAutoRenew] = useState(sub?.autoRenew ?? true)
-  const [accountId, setAccountId] = useState(sub ? (sub.accountId ?? '') : (defaultAccount(accounts)?.id ?? ''))
+  const [accountId, setAccountId] = useState(sub?.accountId ?? '')
   const [currency, setCurrency] = useState(sub?.currency ?? 'RUB')
-  const [categoryId, setCategoryId] = useState(sub ? (sub.categoryId ?? '') : 'default-subscriptions')
   const [remindDays, setRemindDays] = useState(sub?.remindDays ?? 3)
   const [note, setNote] = useState(sub?.note ?? '')
-  // Выплаты, на которые делится месячный доход; пустой список — приходит одной суммой.
-  const [parts, setParts] = useState<{ day: string; amount: string }[]>(
-    () => sub?.installments?.map((p) => ({ day: String(p.day), amount: amountToInput(p.amount) })) ?? [],
-  )
   const [error, setError] = useState('')
 
-  const isIncome = direction === 'income'
-  const canSplit = isIncome && period === 'month'
-  const split = canSplit && parts.length > 1
-  const partsTotal = parts.reduce((sum, p) => sum + (parseAmount(p.amount) ?? 0), 0)
-
-  function setPartCount(count: number) {
-    if (count <= 1) return setParts([])
-    setParts((current) => {
-      // Первая строка наследует то, что уже введено одной суммой.
-      const base = current.length > 0 ? current : [{ day: nextDate ? String(Number(nextDate.slice(8))) : '', amount }]
-      return Array.from({ length: count }, (_, i) => base[i] ?? { day: '', amount: '' })
-    })
-  }
-
-  const setPart = (index: number, change: Partial<{ day: string; amount: string }>) =>
-    setParts((current) => current.map((p, i) => (i === index ? { ...p, ...change } : p)))
-  const account = accounts.find((a) => a.id === accountId)
-  const kindCategories = categories.filter((c) => c.kind === direction)
-
-  function switchDirection(value: CategoryKind) {
-    setDirection(value)
-    // Категории доходов и расходов разные, прежний выбор к новому типу не подходит.
-    setCategoryId(value === 'expense' ? 'default-subscriptions' : 'default-salary')
-  }
-
-  /** Проверяет форму и возвращает поля записи или null, если есть ошибка. */
-  function readFields() {
-    const trimmed = name.trim()
-    if (!trimmed) return setError('Введите название'), null
-    let installments: Installment[] | null = null
-    let parsed: number | null
-    let date = nextDate
-    if (split) {
-      installments = []
-      for (const [i, part] of parts.entries()) {
-        const day = /^\d{1,2}$/.test(part.day.trim()) ? Number(part.day) : 0
-        if (day < 1 || day > 31) return setError(`Выплата ${i + 1}: число месяца — от 1 до 31`), null
-        const partAmount = parseAmount(part.amount)
-        if (partAmount === null || partAmount <= 0) return setError(`Выплата ${i + 1}: введите сумму больше нуля`), null
-        if (installments.some((p) => p.day === day)) return setError(`Выплата ${i + 1}: это число месяца уже занято другой выплатой`), null
-        installments.push({ day, amount: partAmount })
-      }
-      installments.sort((a, b) => a.day - b.day)
-      // Ещё не отмеченную выплату не теряем: дата остаётся, если на неё по-прежнему приходится выплата.
-      const pending = sub ? installmentAt(installments, sub.nextDate) : undefined
-      const nearest = pending ? { date: sub!.nextDate, amount: pending.amount } : upcomingInstallment(installments, today())
-      parsed = nearest.amount
-      date = nearest.date
-    } else {
-      parsed = parseAmount(amount)
-      if (parsed === null || parsed <= 0) return setError('Введите сумму больше нуля'), null
-      if (!date) return setError('Укажите дату'), null
-    }
-    return {
-      direction,
-      name: trimmed,
-      amount: parsed,
-      installments,
-      // Если запись привязана к счёту, она считается в его валюте.
-      currency: account?.currency ?? currency,
-      period,
-      nextDate: date,
-      // У дохода нет «срока действия»: он просто повторяется.
-      autoRenew: isIncome ? true : autoRenew,
-      accountId: account?.id ?? null,
-      categoryId: kindCategories.some((c) => c.id === categoryId) ? categoryId : null,
-      remindDays,
-      note: note.trim(),
-    }
-  }
+  const card = cards.find((a) => a.id === accountId)
+  const shownCurrency = card?.currency ?? currency
+  const parsed = parseAmount(amount)
 
   async function save(e: FormEvent) {
     e.preventDefault()
-    const fields = readFields()
-    if (!fields) return
+    const trimmed = name.trim()
+    if (!trimmed) return setError('Введите название')
+    if (parsed === null || parsed <= 0) return setError('Введите сумму больше нуля')
+    if (!nextDate) return setError('Укажите дату')
+    const fields = {
+      direction: 'expense' as const,
+      name: trimmed,
+      amount: parsed,
+      installments: null,
+      // Подписка, привязанная к карте, считается в её валюте.
+      currency: shownCurrency,
+      period,
+      nextDate,
+      autoRenew,
+      accountId: card?.id ?? null,
+      categoryId: sub?.categoryId ?? 'default-subscriptions',
+      remindDays,
+      note: note.trim(),
+    }
     if (sub) await db.subscriptions.update(sub.id, { ...fields, ...touched() })
     else await db.subscriptions.add(newRecord<Subscription>(fields))
     onClose()
@@ -321,27 +187,17 @@ function SubscriptionForm({
     onClose()
   }
 
-  const dateLabel = isIncome ? 'Следующее поступление' : autoRenew ? 'Следующее списание' : 'Оплачена до'
-
   return (
-    <Modal wide title={sub ? 'Регулярный платёж' : 'Новый регулярный платёж'} onClose={onClose}>
+    <Modal wide title={sub ? 'Подписка' : 'Новая подписка'} onClose={onClose}>
       <form onSubmit={save}>
-        <div className="segmented">
-          {DIRECTIONS.map(([value, label]) => (
-            <button key={value} type="button" className={direction === value ? 'active' : ''} onClick={() => switchDirection(value)}>
-              {label}
-            </button>
-          ))}
-        </div>
-
         <label>
           Название
-          <input
-            autoFocus={!sub}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={isIncome ? 'Например, Зарплата' : 'Например, Музыка'}
-          />
+          <input autoFocus={!sub} value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Музыка" />
+        </label>
+
+        <label>
+          Стоимость, {shownCurrency}
+          <input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
         </label>
 
         <label>
@@ -354,53 +210,10 @@ function SubscriptionForm({
           />
         </label>
 
-        {canSplit && (
-          <label>
-            Выплат в месяц
-            <Select
-              title="Выплат в месяц"
-              value={String(Math.max(1, parts.length))}
-              onChange={(v) => setPartCount(Number(v))}
-              options={Array.from({ length: MAX_PARTS }, (_, i) => ({
-                value: String(i + 1),
-                label: i === 0 ? 'Одна — всей суммой' : String(i + 1),
-              }))}
-            />
-          </label>
-        )}
-
-        {split ? (
-          <>
-            <p className="hint">
-              Например, аванс и основная часть. Напоминание и отметка «Получено» работают по каждой выплате отдельно.
-            </p>
-            {parts.map((part, i) => (
-              <Fragment key={i}>
-                <label>
-                  Выплата {i + 1} — число месяца
-                  <input inputMode="numeric" value={part.day} onChange={(e) => setPart(i, { day: e.target.value })} placeholder="1–31" />
-                </label>
-                <label>
-                  Выплата {i + 1} — сумма, {account?.currency ?? currency}
-                  <input inputMode="decimal" value={part.amount} onChange={(e) => setPart(i, { amount: e.target.value })} placeholder="0,00" />
-                </label>
-              </Fragment>
-            ))}
-            <p className="hint">Итого в месяц: {formatAmount(partsTotal, account?.currency ?? currency)}</p>
-          </>
-        ) : (
-          <>
-            <label>
-              {isIncome ? 'Сумма' : 'Стоимость'}, {account?.currency ?? currency}
-              <input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
-            </label>
-
-            <label>
-              {dateLabel}
-              <DateInput value={nextDate} onChange={setNextDate} />
-            </label>
-          </>
-        )}
+        <label>
+          {autoRenew ? 'Следующее списание' : 'Оплачена до'}
+          <DateInput value={nextDate} onChange={setNextDate} />
+        </label>
 
         <label>
           Напомнить
@@ -412,29 +225,12 @@ function SubscriptionForm({
           />
         </label>
 
-        {!isIncome && (
-          <label className="check">
-            <input type="checkbox" checked={autoRenew} onChange={(e) => setAutoRenew(e.target.checked)} />
-            Продлевается автоматически
-          </label>
-        )}
-
         <label>
-          {isIncome ? 'Счёт зачисления' : 'Счёт для оплаты'}
-          <Select
-            title={isIncome ? 'Счёт зачисления' : 'Счёт для оплаты'}
-            value={account ? accountId : ''}
-            onChange={setAccountId}
-            options={[{ value: '', label: 'Не привязывать к счёту', icon: <Avatar label="—" /> }, ...accountOptions(accounts)]}
-          />
+          Списывается с кредитки
+          <Select title="Списывается с кредитки" value={card ? accountId : ''} onChange={setAccountId} options={cardOptions(cards, 'Не с кредитки')} />
         </label>
 
-        {account ? (
-          <label>
-            Категория
-            <Select title="Категория" value={categoryId} onChange={setCategoryId} options={categoryOptions(kindCategories)} />
-          </label>
-        ) : (
+        {!card && (
           <label>
             Валюта
             <Select title="Валюта" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />
@@ -446,12 +242,19 @@ function SubscriptionForm({
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
 
+        <label className="check">
+          <input type="checkbox" checked={autoRenew} onChange={(e) => setAutoRenew(e.target.checked)} />
+          Продлевается автоматически
+        </label>
+
+        {parsed !== null && parsed > 0 && period !== 'month' && (
+          <p className="hint">В пересчёте на месяц: {formatAmount(monthlyCost(parsed, period), shownCurrency)}.</p>
+        )}
+
         {error && <p className="error">{error}</p>}
 
         <div className="actions">
-          {sub && (
-            <ConfirmButton label="Удалить" onConfirm={remove} />
-          )}
+          {sub && <ConfirmButton label="Удалить" onConfirm={remove} />}
           <button type="submit" className="primary">
             Сохранить
           </button>
@@ -462,23 +265,12 @@ function SubscriptionForm({
 }
 
 /**
- * Отметка «Получено» / «Оплачено»: фактическая сумма может отличаться от плановой —
- * зарплата с процентами, счёт за свет — поэтому её можно поправить перед записью.
+ * Отметка «Оплачено»: переносит срок на следующий период. Если подписка списалась с кредитки,
+ * её сумма добавляется к долгу карты. Фактическая сумма может отличаться от плановой — её можно поправить.
  */
-export function PayForm({
-  sub,
-  accounts,
-  categories,
-  onClose,
-}: {
-  sub: Subscription
-  accounts: Account[]
-  categories: Category[]
-  onClose: () => void
-}) {
-  const isIncome = sub.direction === 'income'
-  // Запись ведётся в своей валюте, поэтому подходят только счета в ней.
-  const usable = accounts.filter((a) => a.currency === sub.currency)
+export function PayForm({ sub, cards, onClose }: { sub: Subscription; cards: Account[]; onClose: () => void }) {
+  // Списание ведётся в валюте подписки, поэтому подходят только карты в ней.
+  const usable = cards.filter((a) => a.currency === sub.currency)
   const money = (minor: number) => formatAmount(minor, sub.currency)
 
   const [amount, setAmount] = useState(amountToInput(sub.amount))
@@ -495,19 +287,15 @@ export function PayForm({
     e.preventDefault()
     if (parsed === null || parsed <= 0) return setError('Введите сумму больше нуля')
     if (!date) return setError('Укажите дату')
-    await paySubscription(
-      // Категорию могли удалить после создания записи.
-      { ...sub, categoryId: categories.some((c) => c.id === sub.categoryId) ? sub.categoryId : null },
-      { amount: parsed, date, accountId: accountId || null, remember: remember && changed },
-    )
+    await paySubscription(sub, { amount: parsed, date, accountId: accountId || null, remember: remember && changed })
     onClose()
   }
 
   return (
-    <Modal title={`${isIncome ? 'Получено' : 'Оплачено'}: ${sub.name}`} onClose={onClose}>
+    <Modal title={`Оплачено: ${sub.name}`} onClose={onClose}>
       <form onSubmit={save}>
         <label>
-          {isIncome ? 'Сколько пришло' : 'Сколько списали'}, {sub.currency}
+          Сколько списали, {sub.currency}
           <input className="amount-input" inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
         </label>
 
@@ -526,26 +314,23 @@ export function PayForm({
           <DateInput value={date} onChange={setDate} />
         </label>
 
-        <label>
-          {isIncome ? 'Счёт зачисления' : 'Счёт списания'}
-          <Select
-            title={isIncome ? 'Счёт зачисления' : 'Счёт списания'}
-            value={accountId}
-            onChange={setAccountId}
-            options={[{ value: '', label: 'Не записывать операцию', icon: <Avatar label="—" /> }, ...accountOptions(usable)]}
-          />
-        </label>
+        {usable.length > 0 && (
+          <label>
+            Списано с кредитки
+            <Select title="Списано с кредитки" value={accountId} onChange={setAccountId} options={cardOptions(usable, 'Не с кредитки')} />
+          </label>
+        )}
 
         <p className="hint">
-          {accountId ? '' : 'Операция записана не будет, срок просто перенесётся. '}
-          {isIncome ? 'Следующее поступление' : 'Следующий платёж'}: {formatDate(next.nextDate)}, {money(next.amount)}.
+          {accountId ? 'Сумма добавится к долгу карты. ' : ''}
+          Следующий платёж: {formatDate(next.nextDate)}, {money(next.amount)}.
         </p>
 
         {error && <p className="error">{error}</p>}
 
         <div className="actions">
           <button type="submit" className="primary">
-            {isIncome ? 'Получено' : 'Оплачено'}
+            Оплачено
           </button>
         </div>
       </form>

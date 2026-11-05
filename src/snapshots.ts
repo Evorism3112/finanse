@@ -36,7 +36,7 @@ async function save(day: string, kind: Snapshot['kind']): Promise<void> {
 export async function saveDailySnapshot(day: string): Promise<void> {
   const today = await store.snapshots.where('day').equals(day).toArray()
   if (today.some((s) => s.kind === 'daily')) return
-  if ((await db.accounts.count()) === 0) return
+  if ((await db.accounts.count()) + (await db.subscriptions.count()) === 0) return
   await save(day, 'daily')
 }
 

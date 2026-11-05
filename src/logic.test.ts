@@ -35,8 +35,7 @@ import {
   statementState,
   statementText,
 } from './payments'
-import { budgetRows, creditUsage, mainCurrency, monthlySeries } from './stats'
-import { accountBalances, monthlyInterest, monthReport, netWorthByCurrency } from './stats'
+import { accountBalances, creditUsage } from './stats'
 
 const synced = { createdAt: 1, updatedAt: 1, deletedAt: null }
 
@@ -116,10 +115,6 @@ describe('accountBalances', () => {
     expect(balances.get('card')).toBe(100000 + 50000 - 12050 - 30000 - 90000)
     expect(balances.get('cash')).toBe(30000)
     expect(balances.get('usd')).toBe(1000)
-    expect(netWorthByCurrency(accounts, balances)).toEqual([
-      { currency: 'RUB', assets: 47950, debts: 0 },
-      { currency: 'USD', assets: 1000, debts: 0 },
-    ])
   })
 
   test('долги по кредитам и кредитным картам', () => {
@@ -137,7 +132,6 @@ describe('accountBalances', () => {
     expect(balances.get('card')).toBe(30000)
     expect(balances.get('credit')).toBe(-200000)
     expect(balances.get('loan')).toBe(-81180000)
-    expect(netWorthByCurrency(withDebts, balances)).toEqual([{ currency: 'RUB', assets: 30000, debts: 81380000 }])
   })
 
   test('creditUsage: проценты в долге не занимают лимит', () => {
@@ -149,52 +143,6 @@ describe('accountBalances', () => {
     expect(creditUsage(10000000, 250000, 0)).toEqual({ used: 0, available: 10250000 })
   })
 
-  test('monthlyInterest', () => {
-    expect(monthlyInterest(15000000, 16)).toBe(200000)
-    expect(monthlyInterest(-80000000, 18)).toBe(1200000)
-    expect(monthlyInterest(0, 18)).toBe(0)
-  })
-})
-
-describe('monthReport', () => {
-  const accounts = [account('card', 'RUB'), account('usd', 'USD')]
-
-  test('считает только нужный месяц, без переводов, по валютам', () => {
-    const report = monthReport(
-      accounts,
-      [
-        tx({ type: 'income', amount: 100000, categoryId: 'salary' }),
-        tx({ type: 'expense', amount: 3000, categoryId: 'food' }),
-        tx({ type: 'expense', amount: 7000, categoryId: 'food' }),
-        tx({ type: 'expense', amount: 20000, categoryId: 'rent' }),
-        tx({ type: 'expense', amount: 500 }),
-        tx({ type: 'expense', amount: 999, date: '2026-09-30' }),
-        tx({ type: 'transfer', amount: 5000, toAccountId: 'usd', toAmount: 50 }),
-        tx({ type: 'expense', amount: 1500, accountId: 'usd' }),
-      ],
-      '2026-10',
-    )
-    expect(report).toEqual([
-      {
-        currency: 'RUB',
-        income: 100000,
-        expense: 30500,
-        incomeByCategory: [{ categoryId: 'salary', amount: 100000 }],
-        expenseByCategory: [
-          { categoryId: 'rent', amount: 20000 },
-          { categoryId: 'food', amount: 10000 },
-          { categoryId: null, amount: 500 },
-        ],
-      },
-      {
-        currency: 'USD',
-        income: 0,
-        expense: 1500,
-        incomeByCategory: [],
-        expenseByCategory: [{ categoryId: null, amount: 1500 }],
-      },
-    ])
-  })
 })
 
 describe('слияние копий', () => {
@@ -446,42 +394,7 @@ describe('льготный период кредитной карты', () => {
   })
 })
 
-describe('лимиты и динамика', () => {
-  const category = (id: string, budget: number | null, kind: Category['kind'] = 'expense') => ({ id, kind, budget })
-
-  test('budgetRows: только расходные категории с лимитом, ближе к лимиту — выше', () => {
-    const rows = budgetRows(
-      [category('food', 1500000), category('fun', 500000), category('rent', null), category('salary', 100, 'income'), category('gifts', 300000)],
-      [
-        { categoryId: 'food', amount: 324050 },
-        { categoryId: 'fun', amount: 620000 },
-        { categoryId: 'rent', amount: 4000000 },
-      ],
-    )
-    expect(rows).toEqual([
-      { categoryId: 'fun', budget: 500000, spent: 620000 },
-      { categoryId: 'food', budget: 1500000, spent: 324050 },
-      { categoryId: 'gifts', budget: 300000, spent: 0 },
-    ])
-  })
-
-  test('monthlySeries и mainCurrency', () => {
-    const accounts = [account('card', 'RUB'), account('usd', 'USD')]
-    const txs = [
-      tx({ type: 'income', amount: 100, date: '2026-08-10' }),
-      tx({ type: 'expense', amount: 40, date: '2026-08-11' }),
-      tx({ type: 'expense', amount: 70, date: '2026-10-01' }),
-      tx({ type: 'expense', amount: 5, date: '2026-10-01', accountId: 'usd' }),
-    ]
-    expect(monthlySeries(accounts, txs, 'RUB', ['2026-08', '2026-09', '2026-10'])).toEqual([
-      { month: '2026-08', income: 100, expense: 40 },
-      { month: '2026-09', income: 0, expense: 0 },
-      { month: '2026-10', income: 0, expense: 70 },
-    ])
-    expect(mainCurrency(accounts)).toBe('RUB')
-    expect(mainCurrency([])).toBe('RUB')
-  })
-
+describe('старые записи', () => {
   test('старые записи дополняются новыми полями', () => {
     expect(normalizeCategory({ id: 'c', name: 'Еда', kind: 'expense' } as Category).budget).toBeNull()
     expect(normalizeCategory({ id: 'c', name: 'Еда', kind: 'expense', budget: 5 } as Category).budget).toBe(5)

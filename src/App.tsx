@@ -1,20 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
-import { ACCOUNT_KIND_ORDER } from './accountKinds'
 import { lastBackupAt } from './backup'
-import { BellIcon, ChartIcon, ChevronLeftIcon, HomeIcon, ListIcon, PlusIcon, RepeatIcon, SettingsIcon, SparkIcon, WalletIcon } from './components/Icons'
+import { CardIcon, HomeIcon, RepeatIcon, SettingsIcon } from './components/Icons'
 import { today } from './dates'
-import { db, type Data, type Synced, type Transaction } from './db'
+import { db, type Data, type Synced } from './db'
 import { setBackHandler } from './native'
 import { notifyDue, scheduleUpcoming } from './notify'
-import { AccountsPage } from './pages/AccountsPage'
-import { AssistantPage } from './pages/AssistantPage'
+import { CardsPage } from './pages/CardsPage'
 import { HomePage } from './pages/HomePage'
 import { MorePage } from './pages/MorePage'
-import { ReportPage } from './pages/ReportPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
-import { TransactionsPage } from './pages/TransactionsPage'
-import { TxForm } from './pages/TxForm'
 import { accountReminders } from './payments'
 import { upcomingReminders } from './reminders'
 import { saveDailySnapshot } from './snapshots'
@@ -22,23 +17,15 @@ import { accountBalances } from './stats'
 import { scheduleSync } from './sync'
 import { isDue, reminderText } from './subscriptions'
 
-/**
- * Разделы. На телефоне внизу четыре главных и «+» посередине, а «Регулярные» и «Ещё» открываются кнопками
- * в шапке главной; на широком экране боковое меню показывает все.
- */
+/** Разделы: на телефоне — нижняя панель, на широком экране — боковое меню. */
 const TABS = [
-  ['home', 'Главная', HomeIcon],
-  ['transactions', 'Операции', ListIcon],
-  ['report', 'Аналитика', ChartIcon],
-  ['accounts', 'Счета', WalletIcon],
-  ['assistant', 'Помощник', SparkIcon],
-  ['subscriptions', 'Регулярные', RepeatIcon],
-  ['more', 'Ещё', SettingsIcon],
+  ['home', 'Сводка', HomeIcon],
+  ['cards', 'Кредитки', CardIcon],
+  ['subscriptions', 'Подписки', RepeatIcon],
+  ['more', 'Настройки', SettingsIcon],
 ] as const
 
-type Tab = (typeof TABS)[number][0]
-
-const EXTRA_TABS: Tab[] = ['assistant', 'subscriptions', 'more']
+export type Tab = (typeof TABS)[number][0]
 
 const weekdayDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -52,8 +39,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('home')
   const [day, setDay] = useState(today)
   const [backupAt, setBackupAt] = useState(lastBackupAt)
-  const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
-  // Место в шапке для кнопки раздела, например «+ Счёт».
+  // Место в шапке для кнопки раздела, например «+ Кредитка».
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
 
   const accounts = useLiveQuery(() => db.accounts.toArray())
@@ -61,15 +47,18 @@ export default function App() {
   const transactions = useLiveQuery(() => db.transactions.toArray())
   const subscriptions = useLiveQuery(() => db.subscriptions.toArray())
 
+  // Приложение ведёт только кредитки и подписки. Обычные счета, кредиты и регулярные доходы из прежних версий
+  // остаются в базе и в резервных копиях, но не показываются и не напоминают о себе.
   const data: Data = useMemo(
     () => ({
-      // Из базы записи приходят в порядке случайных id, поэтому счета упорядочиваем по типу и времени создания.
-      accounts: alive(accounts).sort(
-        (a, b) => ACCOUNT_KIND_ORDER.indexOf(a.kind) - ACCOUNT_KIND_ORDER.indexOf(b.kind) || a.createdAt - b.createdAt,
-      ),
+      // Из базы записи приходят в порядке случайных id, поэтому карты упорядочиваем по времени создания.
+      accounts: alive(accounts)
+        .filter((a) => a.kind === 'credit_card')
+        .sort((a, b) => a.createdAt - b.createdAt),
       categories: alive(categories),
+      // Операции нужны целиком: из них складывается долг карты, в том числе взносы, записанные прежними версиями.
       transactions: alive(transactions),
-      subscriptions: alive(subscriptions),
+      subscriptions: alive(subscriptions).filter((s) => s.direction === 'expense'),
     }),
     [accounts, categories, transactions, subscriptions],
   )
@@ -94,7 +83,6 @@ export default function App() {
     }
   }, [])
 
-  // Раз в день сохраняем копию данных внутри браузера — на случай ошибочной правки.
   // Синхронизация с сервером, если она подключена: после правок, раз в минуту и при возвращении в приложение.
   useEffect(() => {
     scheduleSync()
@@ -110,32 +98,34 @@ export default function App() {
     }
   }, [])
 
-  const hasAccounts = data.accounts.length > 0
+  // Раз в день сохраняем копию данных внутри браузера — на случай ошибочной правки.
+  const hasData = data.accounts.length + data.subscriptions.length > 0
   useEffect(() => {
-    if (hasAccounts) void saveDailySnapshot(day)
-  }, [hasAccounts, day])
+    if (hasData) void saveDailySnapshot(day)
+  }, [hasData, day])
+
+  const balances = useMemo(() => accountBalances(data.accounts, data.transactions), [data.accounts, data.transactions])
 
   const due = useMemo(() => data.subscriptions.filter((s) => isDue(s, day)), [data.subscriptions, day])
 
-  // Взносы и льготные периоды по кредитам и кредитным картам.
-  const debtReminders = useMemo(() => {
-    const balances = accountBalances(data.accounts, data.transactions)
-    return data.accounts.flatMap((a) => accountReminders(a, balances.get(a.id) ?? 0, day))
-  }, [data.accounts, data.transactions, day])
+  // Платежи, выписки и льготные периоды по кредиткам.
+  const cardReminders = useMemo(
+    () => data.accounts.flatMap((a) => accountReminders(a, balances.get(a.id) ?? 0, day)),
+    [data.accounts, balances, day],
+  )
 
   useEffect(() => {
-    void notifyDue([...due.map((s) => ({ id: s.id, ...reminderText(s, day) })), ...debtReminders], day)
-  }, [due, debtReminders, day])
+    void notifyDue([...due.map((s) => ({ id: s.id, ...reminderText(s, day) })), ...cardReminders], day)
+  }, [due, cardReminders, day])
 
   // В приложении для телефона будущие напоминания передаются системе — они придут и при закрытом приложении.
   useEffect(() => {
-    const balances = accountBalances(data.accounts, data.transactions)
     void scheduleUpcoming(upcomingReminders(data.subscriptions, data.accounts, balances, day))
-  }, [data, day])
+  }, [data.subscriptions, data.accounts, balances, day])
 
-  // Данные лежат только в браузере, поэтому без свежей копии в файле их легко потерять.
+  // Данные лежат только на устройстве, поэтому без свежей копии в файле их легко потерять.
   const backupDays = backupAt === null ? null : Math.floor((new Date(`${day}T23:59:59`).getTime() - backupAt) / DAY_MS)
-  const backupStale = data.transactions.length > 0 && (backupDays === null || backupDays >= BACKUP_REMIND_DAYS)
+  const backupStale = hasData && (backupDays === null || backupDays >= BACKUP_REMIND_DAYS)
 
   const backupNote = backupStale
     ? backupDays === null
@@ -144,9 +134,9 @@ export default function App() {
     : null
 
   const badges: Partial<Record<Tab, number>> = {
-    home: due.length + debtReminders.length + (backupStale ? 1 : 0),
+    home: due.length + cardReminders.length + (backupStale ? 1 : 0),
+    cards: cardReminders.length,
     subscriptions: due.length,
-    accounts: debtReminders.length,
     more: backupStale ? 1 : 0,
   }
 
@@ -154,7 +144,7 @@ export default function App() {
     <button
       key={id}
       type="button"
-      className={[tab === id && 'active', EXTRA_TABS.includes(id) && 'nav-extra'].filter(Boolean).join(' ')}
+      className={tab === id ? 'active' : undefined}
       aria-current={tab === id ? 'page' : undefined}
       onClick={() => setTab(id)}
     >
@@ -171,57 +161,29 @@ export default function App() {
   return (
     <>
       <header>
-        {EXTRA_TABS.includes(tab) && (
-          <button type="button" className="icon-btn boxed header-back" aria-label="На главную" onClick={() => setTab('home')}>
-            <ChevronLeftIcon />
-          </button>
-        )}
         <div className="header-title">
           {tab === 'home' && <span className="header-date">{weekday[0].toUpperCase() + weekday.slice(1)}</span>}
-          <h1>{tab === 'home' ? 'Сводка' : TABS.find(([id]) => id === tab)![1]}</h1>
+          <h1>{TABS.find(([id]) => id === tab)![1]}</h1>
         </div>
-        <div className="header-actions" ref={setHeaderSlot}>
-          {tab === 'home' && (
-            <>
-              <button type="button" className="icon-btn boxed" aria-label="Помощник" onClick={() => setTab('assistant')}>
-                <SparkIcon />
-              </button>
-              <button type="button" className="icon-btn boxed" aria-label={`Регулярные платежи${due.length ? `: ${due.length}` : ''}`} onClick={() => setTab('subscriptions')}>
-                <BellIcon />
-                {due.length > 0 && <span className="badge">{due.length}</span>}
-              </button>
-              <button type="button" className="icon-btn boxed" aria-label="Настройки" onClick={() => setTab('more')}>
-                <SettingsIcon />
-                {backupStale && <span className="badge dot" />}
-              </button>
-            </>
-          )}
-        </div>
+        <div className="header-actions" ref={setHeaderSlot} />
       </header>
 
       <main key={tab}>
         {loading ? null : tab === 'home' ? (
           <HomePage
             {...data}
+            balances={balances}
             day={day}
-            due={due}
-            debtReminders={debtReminders}
+            cardReminders={cardReminders}
             backupNote={backupNote}
             onGo={setTab}
-            onOpen={setEditing}
           />
-        ) : tab === 'transactions' ? (
-          <TransactionsPage {...data} onOpen={setEditing} />
-        ) : tab === 'accounts' ? (
-          <AccountsPage {...data} day={day} headerSlot={headerSlot} />
+        ) : tab === 'cards' ? (
+          <CardsPage {...data} balances={balances} day={day} headerSlot={headerSlot} />
         ) : tab === 'subscriptions' ? (
           <SubscriptionsPage {...data} day={day} headerSlot={headerSlot} />
-        ) : tab === 'assistant' ? (
-          <AssistantPage {...data} day={day} />
-        ) : tab === 'report' ? (
-          <ReportPage {...data} />
         ) : (
-          <MorePage {...data} onBackup={() => setBackupAt(lastBackupAt())} />
+          <MorePage onBackup={() => setBackupAt(lastBackupAt())} />
         )}
       </main>
 
@@ -230,29 +192,8 @@ export default function App() {
           <img src="/icon.svg" alt="" />
           Финансы
         </div>
-        {TABS.slice(0, 2).map(([id, label, TabIcon]) => navButton(id, label, TabIcon))}
-        <button
-          type="button"
-          className="nav-add"
-          aria-label="Добавить операцию"
-          disabled={!hasAccounts}
-          onClick={() => setEditing('new')}
-        >
-          <PlusIcon />
-          <span>Операция</span>
-        </button>
-        {TABS.slice(2).map(([id, label, TabIcon]) => navButton(id, label, TabIcon))}
+        {TABS.map(([id, label, TabIcon]) => navButton(id, label, TabIcon))}
       </nav>
-
-      {editing && (
-        <TxForm
-          tx={editing === 'new' ? null : editing}
-          accounts={data.accounts}
-          categories={data.categories}
-          transactions={data.transactions}
-          onClose={() => setEditing(null)}
-        />
-      )}
     </>
   )
 }

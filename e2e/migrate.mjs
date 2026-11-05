@@ -46,8 +46,9 @@ const out = await run(async () => {
       await sleep(50)
     }
   }
-  await wait('старая')
-  const hasRow = document.body.innerText.includes('Еда (переименована)')
+  // Старый обычный счёт в новом приложении не показывается: остаётся только в базе.
+  await wait('Добро пожаловать')
+  const hasRow = !document.body.innerText.includes('Старая карта')
   const idb = await new Promise((res, rej) => {
     const o = indexedDB.open('finanse')
     o.onsuccess = () => res(o.result)
@@ -69,7 +70,7 @@ if (result.account.graceRemindDays !== 7 || result.account.graceDate !== null) p
 if (result.account.initialBalance !== 100000) problems.push('начальный остаток изменился')
 if (!result.categories.includes('default-food:Еда (переименована)')) problems.push('переименованная категория не сохранилась')
 if (!result.categories.includes('default-subscriptions:Подписки')) problems.push('не добавлены новые стандартные категории')
-if (!result.hasRow) problems.push('старая операция не показана')
+if (!result.hasRow) problems.push('обычный счёт показан среди кредиток')
 
 if (problems.length > 0) {
   console.log('ОШИБКА обновления базы:', problems.join('; '))

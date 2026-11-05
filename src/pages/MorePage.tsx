@@ -2,15 +2,11 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { exportBackup, importBackup, lastBackupAt, markBackupDone, restoreBackup } from '../backup'
 import { ConfirmButton } from '../components/ConfirmButton'
-import { ChevronLeftIcon, ChevronRightIcon, TagIcon, UploadIcon } from '../components/Icons'
 import { formatDate, isoDate, today } from '../dates'
-import type { Data } from '../db'
 import { downloadText } from '../download'
 import { notifyState, requestNotifications, type NotifyState } from '../notify'
 import { listSnapshots, saveManualSnapshot, type Snapshot } from '../snapshots'
 import { connectSync, detectServer, disconnectSync, syncNow, useSyncStatus } from '../sync'
-import { CategoriesPage } from './CategoriesPage'
-import { ImportPage } from './ImportPage'
 
 const NOTIFY_TEXT: Record<NotifyState, string> = {
   granted: 'Уведомления включены.',
@@ -19,8 +15,7 @@ const NOTIFY_TEXT: Record<NotifyState, string> = {
   unsupported: 'Этот браузер не поддерживает уведомления. Напоминания видны только внутри приложения.',
 }
 
-export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void }) {
-  const [view, setView] = useState<'menu' | 'categories' | 'import'>('menu')
+export function MorePage({ onBackup }: { onBackup: () => void }) {
   const [message, setMessage] = useState('')
   const [permission, setPermission] = useState(notifyState)
   const [backupAt, setBackupAt] = useState(lastBackupAt)
@@ -59,51 +54,8 @@ export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void })
     }
   }
 
-  if (view !== 'menu') {
-    return (
-      <>
-        <button type="button" className="back" onClick={() => setView('menu')}>
-          <ChevronLeftIcon />
-          Назад
-        </button>
-        {view === 'categories' ? <CategoriesPage {...data} /> : <ImportPage {...data} />}
-      </>
-    )
-  }
-
   return (
     <>
-      <ul className="list">
-        <li>
-          <button type="button" className="row" onClick={() => setView('categories')}>
-            <span className="avatar neutral">
-              <TagIcon />
-            </span>
-            <span className="row-main">
-              <span>Категории</span>
-              <span className="muted">Доходы и расходы</span>
-            </span>
-            <span className="muted chevron">
-              <ChevronRightIcon />
-            </span>
-          </button>
-        </li>
-        <li>
-          <button type="button" className="row" onClick={() => setView('import')}>
-            <span className="avatar neutral">
-              <UploadIcon />
-            </span>
-            <span className="row-main">
-              <span>Импорт выписки</span>
-              <span className="muted">Операции из файла банка: CSV, Excel, PDF</span>
-            </span>
-            <span className="muted chevron">
-              <ChevronRightIcon />
-            </span>
-          </button>
-        </li>
-      </ul>
-
       <div className="columns">
         <section className="card spaced">
           <h3>Напоминания</h3>
@@ -161,7 +113,6 @@ export function MorePage({ onBackup, ...data }: Data & { onBackup: () => void })
                       {formatDate(snapshot.day)}
                       {snapshot.kind === 'manual' ? ' · перед восстановлением' : ''}
                     </span>
-                    <span className="muted">операций: {snapshot.transactions}</span>
                   </span>
                   <button type="button" className="chip" onClick={() => void downloadText(`finanse-${snapshot.day}-autocopy.json`, snapshot.data)}>
                     Скачать

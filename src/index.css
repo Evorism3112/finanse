@@ -286,14 +286,14 @@ button:active,
   white-space: nowrap;
 }
 
-/* Нижняя навигация: четыре раздела и салатовая «+» посередине */
+/* Нижняя навигация: четыре раздела */
 
 nav {
   position: fixed;
   inset: auto 0 0 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
   height: calc(var(--nav-height) + env(safe-area-inset-bottom));
   padding: 0 6px env(safe-area-inset-bottom);
@@ -633,6 +633,23 @@ nav .nav-add span {
   margin-top: 14px;
 }
 
+/* Нечётная последняя плитка на телефоне занимает всю строку, на широком экране плитки встают в один ряд. */
+.hero-tiles > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 1000px) {
+  .hero-tiles {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .hero-tiles > div:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
 .hero-tiles > div {
   display: flex;
   flex-direction: column;
@@ -918,12 +935,12 @@ input::placeholder {
 
 /* Узкий экран: пояснение к сумме уходит на вторую строку, иначе названию не остаётся места. */
 @media (max-width: 519px) {
-  .amount.split {
+  .amount.per {
     flex-shrink: 0;
     text-align: right;
   }
 
-  .amount.split .muted {
+  .amount.per .muted {
     display: block;
     font-size: 0.8rem;
   }

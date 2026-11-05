@@ -39,7 +39,7 @@ cat > "$ENTRY" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Финансы
-Comment=Учёт личных финансов
+Comment=Учёт кредитных карт и подписок
 Exec=$TARGET/finanse %U
 Icon=finanse
 Terminal=false

@@ -1,235 +1,140 @@
 import { useMemo, useState } from 'react'
-import { ACCOUNT_KINDS } from '../accountKinds'
-import { queueQuestion } from '../assistant'
-import { colorOf } from '../colors'
+import type { Tab } from '../App'
+import { CARD_COLOR, cardTotals } from '../cards'
 import { Avatar } from '../components/Avatar'
-import { ArrowInIcon, ArrowOutIcon, CardIcon, ShieldIcon, SparkIcon } from '../components/Icons'
-import { TxRow } from '../components/TxRow'
-import { currentMonth, formatDate, monthLabel } from '../dates'
-import type { Account, Data, Subscription, Transaction } from '../db'
-import { dailyBudget, monthForecast, tips } from '../insights'
+import { CardIcon, ClockIcon, RepeatIcon, ShieldIcon } from '../components/Icons'
+import { dayLabel } from '../dates'
+import type { Account, Data, Subscription } from '../db'
 import { formatAmount } from '../money'
 import type { AccountReminder } from '../payments'
-import { accountBalances, mainCurrency, monthReport, netWorthByCurrency } from '../stats'
-import { dueText } from '../subscriptions'
-import { AccountForm } from './AccountForm'
+import { paymentSchedule, scheduleTotals, type ScheduleItem } from '../schedule'
+import { daysUntil, monthlyTotals } from '../subscriptions'
+import { CardForm, DebtForm } from './CardForm'
+import { CardRow } from './CardsPage'
 import { PaymentForm } from './PaymentForm'
 import { PayForm } from './SubscriptionsPage'
 
-/** Сколько последних операций показывает главная. */
-const RECENT = 5
-/** В полосе по категориям — пять крупнейших, остальное одним отрезком. */
-const BAR_SLICES = 5
+/** На сколько дней вперёд показывать календарь платежей. */
+const SCHEDULE_DAYS = 30
 
-export type HomeTarget = 'transactions' | 'accounts' | 'subscriptions' | 'report' | 'more' | 'assistant'
+/** Когда срок: «сегодня», «через 3 дн.», «просрочено на 2 дн.». */
+function whenText(date: string, today: string): string {
+  const days = daysUntil(date, today)
+  if (days < 0) return `просрочено на ${-days} дн.`
+  if (days === 0) return 'сегодня'
+  if (days === 1) return 'завтра'
+  return `через ${days} дн.`
+}
+
+const KIND_TEXT: Record<ScheduleItem['kind'], string> = {
+  payment: 'обязательный платёж',
+  grace: 'конец льготного периода',
+  subscription: 'подписка',
+}
 
 export function HomePage({
   accounts,
-  categories,
-  transactions,
   subscriptions,
+  balances,
   day,
-  due,
-  debtReminders,
+  cardReminders,
   backupNote,
   onGo,
-  onOpen,
 }: Data & {
+  balances: Map<string, number>
   day: string
-  due: Subscription[]
-  debtReminders: AccountReminder[]
+  cardReminders: AccountReminder[]
   /** Текст напоминания о резервной копии или null, если копия свежая. */
   backupNote: string | null
-  onGo: (target: HomeTarget) => void
-  onOpen: (tx: Transaction) => void
+  onGo: (tab: Tab) => void
 }) {
   const [paying, setPaying] = useState<Subscription | null>(null)
-  const [payingDebt, setPayingDebt] = useState<Account | null>(null)
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [payingCard, setPayingCard] = useState<Account | null>(null)
+  const [editingCard, setEditingCard] = useState<Account | null>(null)
+  const [updatingCard, setUpdatingCard] = useState<Account | null>(null)
 
-  const currency = mainCurrency(accounts)
-  const month = currentMonth()
-  const balances = useMemo(() => accountBalances(accounts, transactions), [accounts, transactions])
-  const worth = useMemo(() => netWorthByCurrency(accounts, balances), [accounts, balances])
-  const main = worth.find((w) => w.currency === currency)
-  const others = worth.filter((w) => w !== main && w.assets > 0)
-  const report = useMemo(() => monthReport(accounts, transactions, month).find((r) => r.currency === currency), [accounts, transactions, month, currency])
-
+  const totals = useMemo(() => cardTotals(accounts, balances), [accounts, balances])
+  const monthly = useMemo(() => monthlyTotals(subscriptions), [subscriptions])
+  const schedule = useMemo(() => paymentSchedule(accounts, balances, subscriptions, day, SCHEDULE_DAYS), [accounts, balances, subscriptions, day])
+  const toPay = useMemo(() => scheduleTotals(schedule), [schedule])
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
-  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
-  const budget = useMemo(() => dailyBudget(accounts, balances, subscriptions, day), [accounts, balances, subscriptions, day])
-  const forecast = useMemo(() => monthForecast(accounts, transactions, day), [accounts, transactions, day])
-  const advice = useMemo(
-    () => tips(accounts, categories, transactions, subscriptions, balances, day),
-    [accounts, categories, transactions, subscriptions, balances, day],
-  )
-  const recent = useMemo(
-    () => [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt).slice(0, RECENT),
-    [transactions],
-  )
+  // После выписки нужно не платить, а сначала указать рассчитанный банком платёж.
+  const statements = cardReminders.filter((r) => r.id.endsWith(':statement'))
 
-  if (accounts.length === 0) {
+  if (accounts.length === 0 && subscriptions.length === 0) {
     return (
       <div className="card welcome">
         <span className="avatar accent">
           <CardIcon />
         </span>
         <h2>Добро пожаловать</h2>
-        <p className="muted">Сначала добавьте счёт на вкладке «Счета» — например, «Карта» или «Наличные».</p>
-        <button type="button" className="primary" onClick={() => onGo('accounts')}>
-          Добавить счёт
-        </button>
+        <p className="muted">
+          Добавьте кредитки и подписки — приложение покажет долг и доступный лимит, напомнит об обязательном платеже, конце
+          льготного периода и списаниях.
+        </p>
+        <div className="actions">
+          <button type="button" className="primary" onClick={() => onGo('cards')}>
+            Добавить кредитку
+          </button>
+          <button type="button" onClick={() => onGo('subscriptions')}>
+            Добавить подписку
+          </button>
+        </div>
       </div>
     )
   }
 
-  const money = (minor: number) => formatAmount(minor, currency)
-  const ask = (question: string) => {
-    queueQuestion(question)
-    onGo('assistant')
-  }
-  const expenses = report?.expenseByCategory ?? []
-  const shown = expenses.slice(0, BAR_SLICES)
-  const rest = (report?.expense ?? 0) - shown.reduce((sum, c) => sum + c.amount, 0)
-  const nameOf = (id: string | null) => (id && categoryById.get(id)?.name) || 'Без категории'
-  const attention = due.length + debtReminders.length + (backupNote ? 1 : 0)
+  const list = (pairs: [string, number][]) => pairs.map(([currency, amount]) => formatAmount(amount, currency)).join(', ') || formatAmount(0, 'RUB')
+  const main = totals[0]
 
   return (
     <div className="home">
       <section className="hero accent">
-        <span>Свои средства</span>
-        <strong>{money(main?.assets ?? 0)}</strong>
-        {others.length > 0 && <span className="hero-extra">и {others.map((w) => formatAmount(w.assets, w.currency)).join(', ')}</span>}
-        {main && main.debts > 0 && (
-          <div className="hero-tiles">
+        <span>Долг по кредиткам</span>
+        <strong>{main ? formatAmount(main.debt, main.currency) : formatAmount(0, 'RUB')}</strong>
+        {totals.length > 1 && <span className="hero-extra">и {totals.slice(1).map((t) => formatAmount(t.debt, t.currency)).join(', ')}</span>}
+        <div className="hero-tiles">
+          {main && main.limit > 0 && (
             <div>
-              <span>Долги</span>
-              <b>{money(main.debts)}</b>
+              <span>Доступно по картам</span>
+              <b>{formatAmount(main.available, main.currency)}</b>
             </div>
-            <div>
-              <span>С учётом долгов</span>
-              <b>{money(main.assets - main.debts)}</b>
-            </div>
+          )}
+          <div>
+            <span>К оплате за {SCHEDULE_DAYS} дней</span>
+            <b>{list(toPay)}</b>
           </div>
-        )}
-      </section>
-
-      <section className="card budget-card">
-        <div className="budget-main">
-          <span className="muted">Можно тратить в день</span>
-          <strong className={budget.free < 0 ? 'amount expense' : 'amount'}>{money(budget.perDay)}</strong>
-          <span className="muted wrap">
-            {budget.payday ? `до дохода ${formatDate(budget.until)}` : 'до конца месяца'} · {budget.days} дн. ·{' '}
-            {budget.free < 0 ? `не хватает ${money(-budget.free)}` : `свободно ${money(budget.free)}`}
-          </span>
+          <div>
+            <span>Подписки в месяц</span>
+            <b>{list(monthly)}</b>
+          </div>
         </div>
-        <button type="button" className="chip" onClick={() => ask('сколько можно тратить в день')}>
-          Как считается
-        </button>
       </section>
 
       <div className="home-columns">
         <div className="home-column">
-          <section className="card">
-            <div className="card-head">
-              <h2>{monthLabel(month).split(' ')[0]}</h2>
-              <button type="button" className="link" onClick={() => onGo('report')}>
-                Аналитика
-              </button>
-            </div>
-            <div className="flow">
-              <div>
-                <span className="avatar income">
-                  <ArrowInIcon />
-                </span>
-                <span className="flow-text">
-                  <span className="muted">Доходы</span>
-                  <strong className="amount income">+{money(report?.income ?? 0)}</strong>
-                </span>
-              </div>
-              <div>
-                <span className="avatar expense">
-                  <ArrowOutIcon />
-                </span>
-                <span className="flow-text">
-                  <span className="muted">Расходы</span>
-                  <strong className="amount expense">−{money(report?.expense ?? 0)}</strong>
-                </span>
-              </div>
-            </div>
-            {forecast && (
-              <p className="forecast">
-                Прогноз на месяц: ≈ {money(forecast.forecast)}
-                {forecast.usual ? <span className="muted"> · обычно {money(forecast.usual)}</span> : null}
-              </p>
-            )}
-            {shown.length > 0 && (
-              <>
-                <div className="stack-bar" aria-hidden="true">
-                  {shown.map((c) => (
-                    <span key={c.categoryId ?? ''} style={{ flexGrow: c.amount, background: c.categoryId ? colorOf(c.categoryId) : 'var(--muted)' }} />
-                  ))}
-                  {rest > 0 && <span style={{ flexGrow: rest, background: 'var(--surface-3)' }} />}
-                </div>
-                <ul className="legend">
-                  {shown.map((c) => (
-                    <li key={c.categoryId ?? ''}>
-                      <span className="swatch" style={{ background: c.categoryId ? colorOf(c.categoryId) : 'var(--muted)' }} />
-                      {nameOf(c.categoryId)}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
-
-          {attention > 0 && (
+          {(statements.length > 0 || backupNote) && (
             <section>
               <div className="section-head">
                 <h2>Требует внимания</h2>
-                <span className="count warn">{attention}</span>
+                <span className="count warn">{statements.length + (backupNote ? 1 : 0)}</span>
               </div>
               <ul className="list">
-                {due.map((s) => (
-                  <li key={s.id} className="attention">
-                    <Avatar id={s.categoryId ?? s.id} label={s.name} />
-                    <span className="row-main">
-                      <span className="wrap">
-                        {s.name} · {formatAmount(s.amount, s.currency)}
-                      </span>
-                      <span className="muted soon">{dueText(s, day)}</span>
-                    </span>
-                    <button type="button" className="chip" onClick={() => setPaying(s)}>
-                      {s.direction === 'income' ? 'Получено' : 'Оплачено'}
-                    </button>
-                  </li>
-                ))}
-                {debtReminders.map((r) => {
+                {statements.map((r) => {
                   const account = accountById.get(r.id.split(':')[0])
-                  const kind = ACCOUNT_KINDS.find((k) => k.kind === account?.kind)
                   return (
                     <li key={r.id} className="attention">
-                      <Avatar id={account?.id} label={r.title} color={kind?.color}>
-                        {kind && <kind.Icon />}
+                      <Avatar id={account?.id} label={r.title} color={CARD_COLOR}>
+                        <CardIcon />
                       </Avatar>
                       <span className="row-main">
-                        <span className="wrap">
-                          {r.title}
-                          {account?.paymentAmount ? ` · ${formatAmount(account.paymentAmount, account.currency)}` : ''}
-                        </span>
+                        <span className="wrap">{r.title}</span>
                         <span className="muted soon wrap">{r.text}</span>
                       </span>
-                      {/* После выписки нужно не платить, а сначала указать рассчитанный банком платёж. */}
-                      {account && r.id.endsWith(':statement') ? (
-                        <button type="button" className="chip strong" onClick={() => setEditingAccount(account)}>
+                      {account && (
+                        <button type="button" className="chip strong" onClick={() => setEditingCard(account)}>
                           Указать
                         </button>
-                      ) : (
-                        account && (
-                          <button type="button" className="chip strong" onClick={() => setPayingDebt(account)}>
-                            Внести
-                          </button>
-                        )
                       )}
                     </li>
                   )
@@ -251,67 +156,100 @@ export function HomePage({
               </ul>
             </section>
           )}
+
+          <section>
+            <div className="section-head">
+              <h2>Ближайшие платежи</h2>
+              {schedule.some((i) => i.due) && <span className="count warn">{schedule.filter((i) => i.due).length}</span>}
+            </div>
+            {schedule.length === 0 ? (
+              <p className="empty small">В ближайшие {SCHEDULE_DAYS} дней платить ничего не нужно.</p>
+            ) : (
+              <ul className="list">
+                {schedule.map((item) => {
+                  const isSub = item.kind === 'subscription'
+                  const name = isSub ? item.subscription.name : item.account.name
+                  const status = item.due ? (daysUntil(item.date, day) < 0 ? ' overdue' : ' soon') : ''
+                  return (
+                    <li key={item.id} className="attention">
+                      {isSub ? (
+                        <Avatar id={item.subscription.id} label={name}>
+                          <RepeatIcon />
+                        </Avatar>
+                      ) : (
+                        <Avatar id={item.account.id} label={name} color={CARD_COLOR}>
+                          {item.kind === 'grace' ? <ClockIcon /> : <CardIcon />}
+                        </Avatar>
+                      )}
+                      <span className="row-main">
+                        <span className="wrap">
+                          {name}
+                          {item.amount !== null && ` · ${item.kind === 'grace' ? 'погасить ' : ''}${formatAmount(item.amount, item.currency)}`}
+                        </span>
+                        <span className={`muted wrap${status}`}>
+                          {KIND_TEXT[item.kind]} · {whenText(item.date, day)} · {dayLabel(item.date)}
+                        </span>
+                      </span>
+                      {isSub ? (
+                        <button type="button" className="chip" onClick={() => setPaying(item.subscription)}>
+                          Оплачено
+                        </button>
+                      ) : (
+                        <button type="button" className={item.due ? 'chip strong' : 'chip'} onClick={() => setPayingCard(item.account)}>
+                          Внести
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
         </div>
 
         <section className="home-column">
-          {advice.length > 0 && (
-            <section className="card tips">
-              <div className="card-head">
-                <h2>Советы</h2>
-                <button type="button" className="link" onClick={() => onGo('assistant')}>
-                  Помощник
-                </button>
-              </div>
-              <ul>
-                {advice.map((tip) => (
-                  <li key={tip.text} className={tip.level}>
-                    <SparkIcon />
-                    <span>{tip.text}</span>
-                  </li>
+          <div>
+            <div className="section-head">
+              <h2>Кредитки</h2>
+              <button type="button" className="link" onClick={() => onGo('cards')}>
+                Все
+              </button>
+            </div>
+            {accounts.length === 0 ? (
+              <p className="empty small">Кредиток пока нет.</p>
+            ) : (
+              <ul className="list">
+                {accounts.map((a) => (
+                  <CardRow
+                    key={a.id}
+                    account={a}
+                    balance={balances.get(a.id) ?? 0}
+                    day={day}
+                    onEdit={() => setEditingCard(a)}
+                    onPay={() => setPayingCard(a)}
+                    onDebt={() => setUpdatingCard(a)}
+                  />
                 ))}
               </ul>
-            </section>
-          )}
-
-          <div className="section-head">
-            <h2>Последние операции</h2>
-            <button type="button" className="link" onClick={() => onGo('transactions')}>
-              Все
-            </button>
+            )}
           </div>
-          {recent.length === 0 ? (
-            <p className="empty small">Операций пока нет. Нажмите «+» внизу, чтобы добавить первую.</p>
-          ) : (
-            <ul className="list">
-              {recent.map((t) => (
-                <TxRow key={t.id} tx={t} accountById={accountById} categoryById={categoryById} onOpen={onOpen} />
-              ))}
-            </ul>
-          )}
         </section>
       </div>
 
-      {paying && <PayForm sub={paying} accounts={accounts} categories={categories} onClose={() => setPaying(null)} />}
-      {editingAccount && (
-        <AccountForm
-          account={editingAccount}
-          hasTransactions={transactions.some((t) => t.accountId === editingAccount.id || t.toAccountId === editingAccount.id)}
-          onClose={() => setEditingAccount(null)}
+      {paying && <PayForm sub={paying} cards={accounts} onClose={() => setPaying(null)} />}
+      {editingCard && (
+        <CardForm
+          account={editingCard}
+          balance={balances.get(editingCard.id) ?? 0}
+          onClose={() => setEditingCard(null)}
           onPay={(account) => {
-            setEditingAccount(null)
-            setPayingDebt(account)
+            setEditingCard(null)
+            setPayingCard(account)
           }}
         />
       )}
-      {payingDebt && (
-        <PaymentForm
-          account={payingDebt}
-          balance={balances.get(payingDebt.id) ?? 0}
-          accounts={accounts}
-          categories={categories}
-          onClose={() => setPayingDebt(null)}
-        />
-      )}
+      {payingCard && <PaymentForm account={payingCard} balance={balances.get(payingCard.id) ?? 0} onClose={() => setPayingCard(null)} />}
+      {updatingCard && <DebtForm account={updatingCard} balance={balances.get(updatingCard.id) ?? 0} onClose={() => setUpdatingCard(null)} />}
     </div>
   )
 }

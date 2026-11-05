@@ -1,44 +1,26 @@
 import { useState, type FormEvent } from 'react'
-import { accountLabel, defaultAccount, isDebtKind } from '../accountKinds'
+import { cardDebt, paymentRecord } from '../cards'
 import { DateInput } from '../components/DateInput'
 import { Modal } from '../components/Modal'
-import { Select } from '../components/Select'
 import { addDays, formatDate, today } from '../dates'
-import { db, newRecord, touched, type Account, type Category, type Transaction } from '../db'
+import { db, touched, type Account } from '../db'
 import { amountToInput, formatAmount, parseAmount } from '../money'
 import { graceToPay, nextStatementDate } from '../payments'
-import { accountOptions } from '../selectOptions'
 import { addPeriod } from '../subscriptions'
 
 /**
- * Взнос по кредиту или кредитной карте: перевод на счёт долга и новый срок следующего платежа.
- * Если взнос закрывает долг целиком, график платежей снимается.
+ * Взнос по кредитке: уменьшает долг и переносит срок следующего платежа.
+ * Если взнос закрывает долг целиком, напоминания о платежах снимаются.
  */
-export function PaymentForm({
-  account,
-  balance,
-  accounts,
-  categories,
-  onClose,
-}: {
-  account: Account
-  balance: number
-  accounts: Account[]
-  categories: Category[]
-  onClose: () => void
-}) {
-  // Взнос вносят своими деньгами в той же валюте; для остального есть обычный перевод.
-  const sources = accounts.filter((a) => a.id !== account.id && a.currency === account.currency && !isDebtKind(a.kind))
-  const isLoan = account.kind === 'loan'
-  const debt = Math.max(0, 0 - balance)
+export function PaymentForm({ account, balance, onClose }: { account: Account; balance: number; onClose: () => void }) {
+  const debt = cardDebt(balance)
   const money = (minor: number) => formatAmount(minor, account.currency)
 
-  const [sourceId, setSourceId] = useState(defaultAccount(sources)?.id ?? '')
-  const [amount, setAmount] = useState(amountToInput(account.paymentAmount ?? debt))
+  const [amount, setAmount] = useState(amountToInput(account.paymentAmount != null ? Math.min(account.paymentAmount, debt) : debt))
   const [interest, setInterest] = useState('')
   const [date, setDate] = useState(today)
   // У карты с днём выписки следующий платёж станет известен только после выписки: приложение само напомнит его указать.
-  const waitsStatement = account.kind === 'credit_card' && account.statementDay != null
+  const waitsStatement = account.statementDay != null
   const [remind, setRemind] = useState(!waitsStatement)
   const [nextDate, setNextDate] = useState(() => addPeriod(account.nextPaymentDate ?? today(), 'month'))
   const [nextAmount, setNextAmount] = useState(account.paymentAmount != null ? amountToInput(account.paymentAmount) : '')
@@ -47,24 +29,19 @@ export function PaymentForm({
 
   const parsed = parseAmount(amount)
   const parsedInterest = interest.trim() === '' ? 0 : parseAmount(interest)
-  // Проценты по кредиту банк начисляет сверх долга, а у карты они уже сидят внутри него.
-  const debtAfter = parsed !== null && parsedInterest !== null ? debt - parsed + (isLoan ? parsedInterest : 0) : null
+  const debtAfter = parsed !== null ? debt - parsed : null
   const closes = debtAfter !== null && debtAfter <= 0
-  const showInterest = isLoan || account.interestDebt > 0
+  const showInterest = account.interestDebt > 0
   // Льготный период: сколько осталось погасить и закрывает ли это условие текущий взнос.
   const grace = graceToPay(account, balance)
   const graceDone = grace > 0 && parsed !== null && (closes || parsed >= grace)
 
   async function save(e: FormEvent) {
     e.preventDefault()
-    const source = sources.find((a) => a.id === sourceId)
-    if (!source) return setError('Выберите счёт, с которого вносится взнос')
     if (parsed === null || parsed <= 0) return setError('Введите сумму взноса больше нуля')
     if (parsedInterest === null || parsedInterest < 0) return setError('Проценты — это число, например 1500,50')
     if (parsedInterest > parsed) return setError('Проценты не могут быть больше взноса')
     if (!date) return setError('Укажите дату взноса')
-    if (isLoan && debtAfter! < 0) return setError(`Взнос больше остатка долга. Чтобы закрыть кредит, внесите ${money(debt + parsedInterest)}`)
-
     if (graceDone && newGrace && newGrace <= date) return setError('Новый льготный период должен заканчиваться позже этого взноса')
 
     let nextPaymentDate: string | null = null
@@ -81,37 +58,12 @@ export function PaymentForm({
       }
     }
 
-    const base = { toAmount: null, date }
     await db.transaction('rw', db.accounts, db.transactions, async () => {
-      await db.transactions.add(
-        newRecord<Transaction>({
-          ...base,
-          type: 'transfer',
-          amount: parsed,
-          accountId: source.id,
-          toAccountId: account.id,
-          categoryId: null,
-          note: closes ? 'Полное погашение' : 'Взнос',
-        }),
-      )
-      // Проценты по кредиту — это расход: он возвращает в долг ту часть взноса, которая не уменьшила тело кредита.
-      if (isLoan && parsedInterest > 0) {
-        await db.transactions.add(
-          newRecord<Transaction>({
-            ...base,
-            type: 'expense',
-            amount: parsedInterest,
-            accountId: account.id,
-            toAccountId: null,
-            categoryId: categories.some((c) => c.id === 'default-interest') ? 'default-interest' : null,
-            note: 'Проценты',
-          }),
-        )
-      }
+      await db.transactions.add(paymentRecord(account, parsed, date, closes ? 'Полное погашение' : 'Взнос'))
       await db.accounts.update(account.id, {
         nextPaymentDate,
         paymentAmount,
-        interestDebt: isLoan ? account.interestDebt : closes ? 0 : Math.max(0, account.interestDebt - parsedInterest),
+        interestDebt: closes ? 0 : Math.max(0, account.interestDebt - parsedInterest),
         // Условие льготного периода выполнено — срок снимается или заменяется новым; иначе уменьшаем остаток.
         graceDate: grace > 0 && graceDone ? newGrace || null : account.graceDate,
         graceAmount: grace > 0 ? (graceDone || account.graceAmount == null ? null : grace - parsed) : account.graceAmount,
@@ -122,18 +74,9 @@ export function PaymentForm({
   }
 
   return (
-    <Modal wide title={`Взнос: ${accountLabel(account)}`} onClose={onClose}>
+    <Modal wide title={`Взнос: ${account.name}`} onClose={onClose}>
       <form onSubmit={save}>
         <p className="hint">Долг сейчас: {money(debt)}</p>
-
-        {sources.length === 0 ? (
-          <p className="error">Нет счёта в валюте {account.currency}, с которого можно внести взнос.</p>
-        ) : (
-          <label>
-            Со счёта
-            <Select title="Со счёта" value={sourceId} onChange={setSourceId} options={accountOptions(sources)} />
-          </label>
-        )}
 
         <label>
           Сумма взноса, {account.currency}
@@ -142,13 +85,13 @@ export function PaymentForm({
 
         {showInterest && (
           <label>
-            {isLoan ? 'Из них проценты (необязательно)' : `Из них проценты (в долге ${money(account.interestDebt)})`}
+            Из них проценты (в долге {money(account.interestDebt)})
             <input inputMode="decimal" value={interest} onChange={(e) => setInterest(e.target.value)} placeholder="0,00" />
           </label>
         )}
 
         <div className="actions start">
-          <button type="button" onClick={() => setAmount(amountToInput(debt + (isLoan ? (parsedInterest ?? 0) : 0)))}>
+          <button type="button" onClick={() => setAmount(amountToInput(debt))}>
             Погасить полностью
           </button>
           {grace > 0 && grace < debt && (
@@ -214,7 +157,7 @@ export function PaymentForm({
         {error && <p className="error">{error}</p>}
 
         <div className="actions">
-          <button type="submit" className="primary" disabled={sources.length === 0}>
+          <button type="submit" className="primary">
             Внести взнос
           </button>
         </div>

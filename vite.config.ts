@@ -19,7 +19,7 @@ export default defineConfig({
       manifest: {
         name: 'Финансы',
         short_name: 'Финансы',
-        description: 'Учёт личных финансов',
+        description: 'Учёт кредитных карт и подписок',
         lang: 'ru',
         display: 'standalone',
         theme_color: '#0a0b0e',

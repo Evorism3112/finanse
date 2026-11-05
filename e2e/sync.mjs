@@ -48,21 +48,21 @@ const asOtherDevice = async (body) => {
 
 let failed = false
 try {
-  // Первое устройство: заводит счёт и подключается к серверу.
+  // Первое устройство: заводит кредитку и подключается к серверу.
   await open(APP_URL)
   await step(async (server, token) => {
     const { waitFor, click, fill, sleep } = window.__h
-    await waitFor('Сначала добавьте счёт')
-    click('nav button', 'Счета')
-    await waitFor('Счетов пока нет')
-    click('button', 'Добавить счёт')
-    await waitFor('Новый счёт')
+    await waitFor('Добро пожаловать')
+    click('nav button', 'Кредитки')
+    await waitFor('Кредиток пока нет')
+    click('header button', 'Добавить кредитку')
+    await waitFor('Новая кредитка')
     fill('Название', 'Общий счёт')
-    fill('Начальный остаток', '500')
+    fill('Долг сейчас', '500')
     click('button', 'Сохранить')
-    await waitFor('Всего на счетах')
+    await waitFor('Долг по кредиткам')
 
-    click('nav button', 'Ещё')
+    click('nav button', 'Настройки')
     await waitFor('Синхронизация между устройствами')
     fill('Адрес сервера', server)
     // Ключ с опечаткой отвергает сервер, ключ не латиницей — само приложение.
@@ -87,7 +87,7 @@ try {
 
   const afterFirst = await asOtherDevice({ since: 0, changes: {} })
   const pushed = afterFirst.changes.accounts.find((a) => a.name === 'Общий счёт')
-  if (!pushed || pushed.initialBalance !== 50000) throw new Error('счёт с первого устройства не дошёл до сервера')
+  if (!pushed || pushed.initialBalance !== -50000) throw new Error('счёт с первого устройства не дошёл до сервера')
 
   // Второе устройство: чистый браузер, после подключения получает счёт с сервера.
   await open(`${APP_URL}icon.svg`)
@@ -105,20 +105,20 @@ try {
   await open(APP_URL)
   await step(async (server, token) => {
     const { waitFor, click, fill, text, sleep } = window.__h
-    await waitFor('Сначала добавьте счёт')
-    click('nav button', 'Ещё')
+    await waitFor('Добро пожаловать')
+    click('nav button', 'Настройки')
     await waitFor('Синхронизация между устройствами')
     fill('Адрес сервера', server)
     fill('Ключ доступа', token)
     click('button', 'Подключить')
     await waitFor('Последняя синхронизация')
-    click('nav button', 'Счета')
+    click('nav button', 'Кредитки')
     await waitFor('Общий счёт')
-    if (!text().includes('500,00 ₽')) throw new Error('остаток счёта не пришёл с сервера:\n' + text())
+    if (!text().includes('500,00 ₽')) throw new Error('долг карты не пришёл с сервера:\n' + text())
 
     // Правка на втором устройстве уходит на сервер сама, без кнопки.
     ;[...document.querySelectorAll('.row')].find((r) => r.textContent.includes('Общий счёт')).click()
-    await waitFor('Тип счёта')
+    await waitFor('Долг сейчас')
     fill('Название', 'Общий счёт переименован')
     click('button', 'Сохранить')
     await waitFor('Общий счёт переименован')
@@ -133,14 +133,14 @@ try {
   // но на сервер они всё равно должны попасть.
   await step(async () => {
     const { waitFor, click, sleep } = window.__h
-    click('nav button', 'Ещё')
+    click('nav button', 'Настройки')
     await waitFor('Импорт из файла')
     const old = { createdAt: 1000, updatedAt: 1000, deletedAt: null }
     const backup = {
       app: 'finanse',
       version: 1,
       exportedAt: 2000,
-      accounts: [{ ...old, id: 'imported-account', name: 'Из старой копии', kind: 'regular', currency: 'RUB', initialBalance: 77700 }],
+      accounts: [{ ...old, id: 'imported-account', name: 'Из старой копии', kind: 'credit_card', currency: 'RUB', initialBalance: 77700 }],
       categories: [],
       transactions: [],
       subscriptions: [],
@@ -160,20 +160,20 @@ try {
   await asOtherDevice({ since: afterImport.rev, changes: { accounts: [{ ...renamed, name: 'Изменено с телефона', updatedAt: Date.now() + 1000 }] } })
   await step(async () => {
     const { waitFor, click } = window.__h
-    click('nav button', 'Ещё')
+    click('nav button', 'Настройки')
     await waitFor('Подключено к')
     click('button', 'Синхронизировать сейчас')
-    click('nav button', 'Счета')
+    click('nav button', 'Кредитки')
     await waitFor('Изменено с телефона')
 
     // Отключение возвращает форму подключения, данные остаются.
-    click('nav button', 'Ещё')
+    click('nav button', 'Настройки')
     await waitFor('Подключено к')
     click('button', 'Отключить')
     await waitFor('Точно отключить?')
     click('button', 'Точно отключить?')
     await waitFor('Адрес сервера')
-    click('nav button', 'Счета')
+    click('nav button', 'Кредитки')
     await waitFor('Изменено с телефона')
   })
 
